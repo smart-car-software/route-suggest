@@ -249,7 +249,7 @@ public final class RouteService extends Service {
         boolean navigated = p.getLong("navigated_at", 0) >= t.startMs - 5 * 60_000L;
         Trip labelled = t.withLabel(name, null, navigated);
         DebugLog.i(TAG, "drive recorded: " + Math.round(t.meters()) + " m, "
-                + (t.endMs - t.startMs) / 60_000L + " min" + (navigated ? ", navigated" : ""));
+                + Math.round((t.endMs - t.startMs) / 60_000.0) + " min" + (navigated ? ", navigated" : ""));
         worker.execute(() -> {
             long id = TripStore.get(this).add(labelled);
             String address = Geocode.reverse(t.endLat, t.endLon);

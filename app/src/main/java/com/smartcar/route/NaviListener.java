@@ -81,16 +81,27 @@ public final class NaviListener extends NotificationListenerService {
         return sbn != null && Navigator.NAVI.equals(sbn.getPackageName());
     }
 
+    /**
+     * The Navigator's guidance notification. Seen on the emulator with the Monjaro mod 30.3.0:
+     * while it leads a route it keeps one ongoing notification, «Navigator is running»,
+     * category {@code navigation}, channel {@code foreground_notification}, no custom view and no
+     * manoeuvres in it; without a route (map, route overview, after «finish») there is none.
+     * So its very presence is the sign.
+     */
+    static boolean isGuidance(Notification n) {
+        if (n == null || (n.flags & Notification.FLAG_ONGOING_EVENT) == 0) return false;
+        return Notification.CATEGORY_NAVIGATION.equals(n.category)
+                || "foreground_notification".equals(n.getChannelId())
+                || n.contentView != null;
+    }
+
     private void rescan() {
         boolean now = false;
         try {
             StatusBarNotification[] active = getActiveNotifications();
             if (active != null) {
                 for (StatusBarNotification sbn : active) {
-                    if (isNavi(sbn) && (sbn.getNotification().flags & Notification.FLAG_ONGOING_EVENT) != 0
-                            && sbn.getNotification().contentView != null) {
-                        now = true;
-                    }
+                    if (isNavi(sbn) && isGuidance(sbn.getNotification())) now = true;
                 }
             }
         } catch (SecurityException | NullPointerException e) {
