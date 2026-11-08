@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ~ Copyright © 2026 smart-car-software contributors
+  ~
+  ~ This program is free software: you can redistribute it and/or modify
+  ~ it under the terms of the GNU General Public License as published by
+  ~ the Free Software Foundation, either version 3 of the License, or
+  ~ (at your option) any later version.
+  ~
+  ~ This program is distributed in the hope that it will be useful,
+  ~ but WITHOUT ANY WARRANTY; without even the implied warranty of
+  ~ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  ~ GNU General Public License for more details.
+  ~
+  ~ You should have received a copy of the GNU General Public License
+  ~ along with this program.  If not, see <https://www.gnu.org/licenses/>.
+  -->
+
+<!-- The car is Russian-speaking and so is the driver: one language, no translations. -->
+<resources>
+    <string name="app_name">Куда поехать</string>
+    <string name="intro">Когда машина заводится, на приборке появляется «Куда едем?»: события календаря, места, куда вы обычно ездите в это время, дом или работа. Колёсико громкости — выбрать, ⏯ — построить маршрут в Навигаторе. Поездки запоминаются сами и остаются в машине.</string>
+
+    <string name="card_title">Куда едем?</string>
+    <string name="not_now">Не сейчас</string>
+    <string name="nothing_title">Пока нечего предложить</string>
+    <string name="nothing_text">Поездите несколько дней или войдите в Яндекс</string>
+
+    <string name="channel_name">Запись поездок</string>
+    <string name="service_text">Запоминает поездки, предлагает маршрут при запуске</string>
+
+    <string name="suggest_now">Предложить сейчас</string>
+    <string name="grant_location">Разрешить геопозицию</string>
+    <string name="grant_navi">Доступ к уведомлениям Навигатора</string>
+    <string name="grant_navi_failed">На этой магнитоле нет экрана доступа к уведомлениям</string>
+    <string name="navi_hint">Необязательно. Тогда приложение видит, что Навигатор уже ведёт по маршруту, и не спрашивает зря. В Навигаторе должна быть включена «Фоновая навигация».</string>
+    <string name="clear_trips">Забыть все поездки</string>
+    <string name="clear_trips_q">Удалить всю историю поездок? Предложения начнут учиться заново.</string>
+    <string name="clear">Удалить</string>
+    <string name="cancel">Отмена</string>
+
+    <string name="st_notify_ok">Всплывашки на приборке: Car Notification Service</string>
+    <string name="st_notify_missing">Нет Car Notification Service — предложения откроются на экране магнитолы</string>
+    <string name="st_navi_ok">Яндекс Навигатор найден</string>
+    <string name="st_navi_missing">Яндекс Навигатор не найден — маршрут откроется в Картах</string>
+    <string name="st_location_ok">Поездки записываются: %1$d</string>
+    <string name="st_location_missing">Нет доступа к геопозиции — поездки не записываются</string>
+    <string name="st_yandex_ok">Яндекс: закладок %1$d, Дом %2$s, Работа %3$s (обновлено %4$s)</string>
+    <string name="st_yandex_missing">Яндекс не подключён — Дом и Работа узнаются по поездкам</string>
+    <string name="st_calendar_ok">Календарь подключён</string>
+    <string name="st_calendar_err">Календарь: %1$s</string>
+    <string name="st_calendar_off">Календарь не настроен в этой сборке</string>
+    <string name="st_listener_ok">Видно, когда Навигатор ведёт по маршруту</string>
+    <string name="st_listener_missing">Нет доступа к уведомлениям Навигатора (необязательно)</string>
+
+    <string name="yandex_login">Войти в Яндекс</string>
+    <string name="yandex_sync">Обновить закладки Яндекса</string>
+    <string name="yandex_logout">Выйти из Яндекса</string>
+    <string name="login_title">Вход в Яндекс</string>
+    <string name="login_hint">Наведите камеру телефона на код, откройте ссылку и подтвердите вход в приложении Яндекс. Пароль не нужен.</string>
+    <string name="login_starting">Готовлю вход…</string>
+    <string name="login_failed">Не получилось начать вход: %1$s</string>
+    <string name="login_timeout">Вход не подтвердили за 5 минут — попробуйте ещё раз</string>
+</resources>

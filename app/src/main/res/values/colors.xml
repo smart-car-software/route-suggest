@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ~ Copyright © 2026 smart-car-software contributors
+  ~
+  ~ This program is free software: you can redistribute it and/or modify
+  ~ it under the terms of the GNU General Public License as published by
+  ~ the Free Software Foundation, either version 3 of the License, or
+  ~ (at your option) any later version.
+  ~
+  ~ This program is distributed in the hope that it will be useful,
+  ~ but WITHOUT ANY WARRANTY; without even the implied warranty of
+  ~ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  ~ GNU General Public License for more details.
+  ~
+  ~ You should have received a copy of the GNU General Public License
+  ~ along with this program.  If not, see <https://www.gnu.org/licenses/>.
+  -->
+
+<resources>
+    <!-- The settings screen. -->
+    <color name="background">#FF15171C</color>
+    <color name="text_primary">#FFF2F5F8</color>
+    <color name="text_secondary">#FF9AA4B0</color>
+    <color name="accent">#FF4FB7F0</color>
+
+    <!-- Cards: picked off the Monjaro cluster's own navigation panel (as barrier-opener's gate
+         question was), not the app theme. The cluster has a single dark look, so these have no
+         night variant. -->
+    <color name="cluster_panel">#D9283442</color>
+    <color name="cluster_panel_rim">#FF55657A</color>
+    <color name="cluster_text">#FFF2F5F8</color>
+    <color name="cluster_text_dim">#FF7D8896</color>
+    <color name="cluster_accent">#FF4FB7F0</color>
+    <color name="cluster_accent_fill">#594FB7F0</color>
+</resources>

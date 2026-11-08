@@ -1,0 +1,10 @@
+.gradle
+build
+.idea
+local.properties
+*.jks
+.DS_Store
+**/.DS_Store
+
+# Local secrets: release signing
+.env

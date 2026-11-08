@@ -1,0 +1,88 @@
+/*
+ * Copyright © 2026 smart-car-software contributors
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+apply plugin: 'com.android.application'
+
+// calendar-bot's car endpoint, baked in at release (repository secrets): nothing to set up in
+// the car. Empty in a CI debug build — the calendar is then simply off.
+def carApiUrl = System.getenv('CAR_API_URL') ?: ''
+def carApiToken = System.getenv('CAR_API_TOKEN') ?: ''
+
+android {
+    namespace "com.smartcar.route"
+
+    compileSdkVersion 36
+
+    defaultConfig {
+        applicationId "com.smartcar.route"
+        minSdk 28
+        // 30 like Car Notification Service: the audience is Android 9 head units, and from 31 a
+        // foreground-service start from the background (the boot receiver) is refused.
+        targetSdkVersion 30
+        versionCode rootProject.ext.appVersionCode
+        versionName rootProject.ext.appVersionName
+
+        buildConfigField "String", "CAR_API_URL", "\"${carApiUrl}\""
+        buildConfigField "String", "CAR_API_TOKEN", "\"${carApiToken}\""
+
+        setProperty("archivesBaseName", "route-suggest-${versionName}")
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    signingConfigs {
+        release {
+            storeFile file('../keystore.jks')
+            storePassword System.getenv("KEY_PASSWORD")
+            keyAlias "key0"
+            keyPassword System.getenv("KEY_PASSWORD")
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+        debug {
+            debuggable true
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_21
+        targetCompatibility JavaVersion.VERSION_21
+    }
+
+    lint {
+        disable 'ExpiredTargetSdkVersion', 'OldTargetApi'
+    }
+
+    testOptions {
+        unitTests.returnDefaultValues = true
+    }
+}
+
+dependencies {
+    implementation libs.zxing.core
+
+    testImplementation 'junit:junit:4.13.2'
+    // android.jar's org.json is stubs only: the real one for the JVM tests.
+    testImplementation 'org.json:json:20240303'
+}

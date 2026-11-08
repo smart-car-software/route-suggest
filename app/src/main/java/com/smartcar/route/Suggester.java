@@ -1,0 +1,362 @@
+/*
+ * Copyright © 2026 smart-car-software contributors
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+package com.smartcar.route;
+
+import java.time.DayOfWeek;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+
+/**
+ * «Куда едем?»: the rows offered when the car starts, in this order —
+ * <ol>
+ *   <li>calendar events going on or starting within the hour;</li>
+ *   <li>routines: where the car went on this weekday at about this time (two weeks or more), or
+ *       on most days lately at this time;</li>
+ *   <li>home or work: «На работу» when standing at home, «Домой» anywhere else — the first row
+ *       when there is nothing above;</li>
+ *   <li>the most visited places.</li>
+ * </ol>
+ * Nothing where the car already stands, and one row per place. Pure: everything comes in
+ * {@link Input}.
+ */
+final class Suggester {
+    /** Closer than this, the car is already there. */
+    static final double AT_M = 300;
+    /** Trip ends this close are one place. */
+    static final double CLUSTER_M = 150;
+    /** A bookmark this close names a place. */
+    static final double NAME_M = 200;
+    /** Two rows this close go to one place: the first is kept. */
+    static final double SAME_M = 250;
+    static final int MAX_ROWS = 6;
+
+    static final long DAY_MS = 24L * 3600_000L;
+    static final long HISTORY_MS = 120 * DAY_MS;
+    static final long WEEKLY_LOOKBACK_MS = 10 * 7 * DAY_MS;
+    static final int WEEKLY_WINDOW_MIN = 90;
+    static final int WEEKLY_MIN_DAYS = 2;
+    static final long DAILY_LOOKBACK_MS = 21 * DAY_MS;
+    static final int DAILY_WINDOW_MIN = 60;
+    static final int DAILY_MIN_DAYS = 3;
+    static final int FREQUENT_MIN = 3;
+    static final int FREQUENT_ROWS = 3;
+    /** A learned home or work needs this many drives ending there. */
+    static final int LEARN_MIN = 3;
+
+    private static final String[] BY_DAY = {"понедельникам", "вторникам", "средам", "четвергам",
+            "пятницам", "субботам", "воскресеньям"};
+
+    static final class Input {
+        long nowMs;
+        ZoneId zone = ZoneId.systemDefault();
+        /** Where the car stands; NaN when no fix. */
+        double hereLat = Double.NaN;
+        double hereLon = Double.NaN;
+        List<Trip> trips = Collections.emptyList();
+        List<CalEvent> events = Collections.emptyList();
+        /** Yandex «Дом», «Работа» and bookmarks. */
+        List<Place> places = Collections.emptyList();
+    }
+
+    /** Trip ends close together: one place the car goes to. */
+    static final class Cluster {
+        double lat;
+        double lon;
+        final List<Trip> trips = new ArrayList<>();
+        String name;
+
+        void add(Trip t) {
+            trips.add(t);
+            int n = trips.size();
+            lat += (t.endLat - lat) / n;
+            lon += (t.endLon - lon) / n;
+        }
+    }
+
+    private Suggester() {
+    }
+
+    static List<Suggestion> suggest(Input in) {
+        boolean located = Geo.valid(in.hereLat, in.hereLon);
+        List<Trip> recent = new ArrayList<>();
+        for (Trip t : in.trips) {
+            if (t.endMs <= in.nowMs && in.nowMs - t.endMs <= HISTORY_MS) recent.add(t);
+        }
+        List<Cluster> clusters = clusters(recent);
+        for (Cluster c : clusters) c.name = name(c, in.places);
+        Place home = homeOrLearned(in.places, clusters, in.zone);
+        Place work = workOrLearned(in.places, clusters, home, in.zone);
+
+        Rows rows = new Rows(in);
+        ZonedDateTime now = Instant.ofEpochMilli(in.nowMs).atZone(in.zone);
+
+        List<CalEvent> events = new ArrayList<>(in.events);
+        events.sort((a, b) -> Long.compare(a.startMs, b.startMs));
+        for (CalEvent e : events) {
+            if (e.endMs <= in.nowMs) continue;
+            String when = e.startMs <= in.nowMs ? "идёт"
+                    : String.format(Locale.ROOT, "%1$tH:%1$tM",
+                    Instant.ofEpochMilli(e.startMs).atZone(in.zone));
+            String name = !e.place.isEmpty() ? e.place : e.title;
+            if (e.hasGeo()) {
+                rows.add(Suggestion.Kind.EVENT, e.title + " · " + when, name, e.lat, e.lon, "");
+            } else if (!e.location.isEmpty()) {
+                rows.add(Suggestion.Kind.EVENT, e.title + " · " + when, name, Double.NaN,
+                        Double.NaN, e.location);
+            }
+        }
+
+        List<Routine> routines = new ArrayList<>();
+        for (Cluster c : clusters) {
+            Routine r = routine(c, now);
+            if (r != null) routines.add(r);
+        }
+        routines.sort((a, b) -> Integer.compare(b.score, a.score));
+        for (Routine r : routines) {
+            String name = r.cluster.name != null ? r.cluster.name : unnamed(r.cluster, in);
+            String when = r.weekly ? "по " + BY_DAY[now.getDayOfWeek().getValue() - 1]
+                    : "обычно в это время";
+            rows.add(Suggestion.Kind.ROUTINE, name + " · " + when, name, r.cluster.lat,
+                    r.cluster.lon, "");
+        }
+
+        if (located && home != null && home.metersTo(in.hereLat, in.hereLon) <= AT_M) {
+            if (work != null) {
+                rows.add(Suggestion.Kind.WORK, "На работу", work.name, work.lat, work.lon, "");
+            }
+        } else if (home != null) {
+            rows.add(Suggestion.Kind.HOME, "Домой", home.name, home.lat, home.lon, "");
+        }
+
+        List<Cluster> frequent = new ArrayList<>();
+        for (Cluster c : clusters) if (c.trips.size() >= FREQUENT_MIN) frequent.add(c);
+        frequent.sort((a, b) -> Integer.compare(b.trips.size(), a.trips.size()));
+        int added = 0;
+        for (Cluster c : frequent) {
+            if (added >= FREQUENT_ROWS) break;
+            String name = c.name != null ? c.name : unnamed(c, in);
+            if (rows.add(Suggestion.Kind.FREQUENT, name, name, c.lat, c.lon, "")) added++;
+        }
+        return rows.out;
+    }
+
+    /** The rows so far: at most {@link #MAX_ROWS}, none where the car is, one per place. */
+    private static final class Rows {
+        final Input in;
+        final List<Suggestion> out = new ArrayList<>();
+
+        Rows(Input in) {
+            this.in = in;
+        }
+
+        boolean add(Suggestion.Kind kind, String row, String name, double lat, double lon,
+                    String query) {
+            if (out.size() >= MAX_ROWS) return false;
+            if (Geo.valid(lat, lon)) {
+                if (Geo.valid(in.hereLat, in.hereLon)
+                        && Geo.meters(lat, lon, in.hereLat, in.hereLon) <= AT_M) {
+                    return false;
+                }
+                for (Suggestion s : out) {
+                    if (s.hasGeo() && Geo.meters(lat, lon, s.lat, s.lon) <= SAME_M) return false;
+                }
+            } else {
+                for (Suggestion s : out) {
+                    if (!s.hasGeo() && s.query.equalsIgnoreCase(query)) return false;
+                }
+            }
+            out.add(new Suggestion(kind, row, name, lat, lon, query));
+            return true;
+        }
+    }
+
+    private static final class Routine {
+        final Cluster cluster;
+        final boolean weekly;
+        final int score;
+
+        Routine(Cluster cluster, boolean weekly, int score) {
+            this.cluster = cluster;
+            this.weekly = weekly;
+            this.score = score;
+        }
+    }
+
+    /**
+     * Whether the place is where the car goes about now: left for it on this weekday within
+     * ±{@value #WEEKLY_WINDOW_MIN} min on {@value #WEEKLY_MIN_DAYS}+ days of the last ten weeks
+     * (weekly), or within ±{@value #DAILY_WINDOW_MIN} min on {@value #DAILY_MIN_DAYS}+ days of
+     * the same kind (workday / weekend) of the last three weeks (daily). Today does not count.
+     */
+    static Routine routine(Cluster c, ZonedDateTime now) {
+        LocalDate today = now.toLocalDate();
+        int nowMin = now.getHour() * 60 + now.getMinute();
+        boolean weekend = isWeekend(now.getDayOfWeek());
+        Set<LocalDate> weekly = new HashSet<>();
+        Set<LocalDate> daily = new HashSet<>();
+        long nowMs = now.toInstant().toEpochMilli();
+        for (Trip t : c.trips) {
+            ZonedDateTime s = Instant.ofEpochMilli(t.startMs).atZone(now.getZone());
+            LocalDate d = s.toLocalDate();
+            if (!d.isBefore(today)) continue;
+            int diff = Math.abs(s.getHour() * 60 + s.getMinute() - nowMin);
+            if (s.getDayOfWeek() == now.getDayOfWeek() && diff <= WEEKLY_WINDOW_MIN
+                    && nowMs - t.startMs <= WEEKLY_LOOKBACK_MS) {
+                weekly.add(d);
+            }
+            if (isWeekend(s.getDayOfWeek()) == weekend && diff <= DAILY_WINDOW_MIN
+                    && nowMs - t.startMs <= DAILY_LOOKBACK_MS) {
+                daily.add(d);
+            }
+        }
+        if (weekly.size() >= WEEKLY_MIN_DAYS) return new Routine(c, true, weekly.size() * 2);
+        if (daily.size() >= DAILY_MIN_DAYS) return new Routine(c, false, daily.size());
+        return null;
+    }
+
+    private static boolean isWeekend(DayOfWeek d) {
+        return d == DayOfWeek.SATURDAY || d == DayOfWeek.SUNDAY;
+    }
+
+    /** Greedy, in time order: each end joins the nearest place within {@link #CLUSTER_M}. */
+    static List<Cluster> clusters(List<Trip> trips) {
+        List<Trip> sorted = new ArrayList<>(trips);
+        sorted.sort((a, b) -> Long.compare(a.endMs, b.endMs));
+        List<Cluster> out = new ArrayList<>();
+        for (Trip t : sorted) {
+            if (!Geo.valid(t.endLat, t.endLon)) continue;
+            Cluster best = null;
+            double bestM = CLUSTER_M;
+            for (Cluster c : out) {
+                double m = Geo.meters(c.lat, c.lon, t.endLat, t.endLon);
+                if (m <= bestM) {
+                    best = c;
+                    bestM = m;
+                }
+            }
+            if (best == null) {
+                best = new Cluster();
+                best.lat = t.endLat;
+                best.lon = t.endLon;
+                out.add(best);
+                best.trips.add(t);
+            } else {
+                best.add(t);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * A place's name: the nearest Yandex place within {@link #NAME_M} («Дом», «Работа», a
+     * bookmark), else the name chosen most often for drives there, else the most common address.
+     */
+    static String name(Cluster c, List<Place> places) {
+        Place best = null;
+        double bestM = NAME_M;
+        for (Place p : places) {
+            double m = p.metersTo(c.lat, c.lon);
+            if (m <= bestM) {
+                best = p;
+                bestM = m;
+            }
+        }
+        if (best != null) return best.name;
+        String n = mostCommon(c, true);
+        return n != null ? n : mostCommon(c, false);
+    }
+
+    private static String mostCommon(Cluster c, boolean names) {
+        Map<String, Integer> count = new HashMap<>();
+        String best = null;
+        int bestN = 0;
+        for (Trip t : c.trips) {
+            String v = names ? t.name : t.address;
+            if (v == null || v.trim().isEmpty()) continue;
+            int n = count.merge(v.trim(), 1, Integer::sum);
+            if (n > bestN) {
+                best = v.trim();
+                bestN = n;
+            }
+        }
+        return best;
+    }
+
+    private static String unnamed(Cluster c, Input in) {
+        if (!Geo.valid(in.hereLat, in.hereLon)) return "Частое место";
+        double km = Geo.meters(c.lat, c.lon, in.hereLat, in.hereLon) / 1000;
+        return km < 10 ? String.format(Locale.ROOT, "Место в %.1f км", km).replace('.', ',')
+                : String.format(Locale.ROOT, "Место в %d км", Math.round(km));
+    }
+
+    private static Place find(List<Place> places, Place.Kind kind) {
+        for (Place p : places) if (p.kind == kind && p.hasGeo()) return p;
+        return null;
+    }
+
+    /** Yandex «Дом», else where most drives end in the evening and at night. */
+    static Place homeOrLearned(List<Place> places, List<Cluster> clusters, ZoneId zone) {
+        Place p = find(places, Place.Kind.HOME);
+        if (p != null) return p;
+        Cluster c = mostEnds(clusters, zone, null, false, 19, 5);
+        return c == null ? null : new Place(Place.Kind.HOME, "Дом", "", c.lat, c.lon);
+    }
+
+    /** Yandex «Работа», else where most workday drives end in the morning (not home). */
+    static Place workOrLearned(List<Place> places, List<Cluster> clusters, Place home,
+                               ZoneId zone) {
+        Place p = find(places, Place.Kind.WORK);
+        if (p != null) return p;
+        Cluster c = mostEnds(clusters, zone, home, true, 7, 12);
+        return c == null ? null : new Place(Place.Kind.WORK, "Работа", "", c.lat, c.lon);
+    }
+
+    /** The place with the most drives ending between fromHour and toHour (wrapping midnight). */
+    private static Cluster mostEnds(List<Cluster> clusters, ZoneId zone, Place not,
+                                    boolean workdays, int fromHour, int toHour) {
+        Cluster best = null;
+        int bestN = LEARN_MIN - 1;
+        for (Cluster c : clusters) {
+            if (not != null && not.metersTo(c.lat, c.lon) <= AT_M) continue;
+            int n = 0;
+            for (Trip t : c.trips) {
+                ZonedDateTime e = Instant.ofEpochMilli(t.endMs).atZone(zone);
+                if (workdays && isWeekend(e.getDayOfWeek())) continue;
+                int h = e.getHour();
+                boolean in = fromHour <= toHour ? h >= fromHour && h < toHour
+                        : h >= fromHour || h < toHour;
+                if (in) n++;
+            }
+            if (n > bestN) {
+                best = c;
+                bestN = n;
+            }
+        }
+        return best;
+    }
+}
