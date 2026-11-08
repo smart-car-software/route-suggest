@@ -151,6 +151,20 @@ public final class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         refresh();
+        // The Navigator's history: re-read when the last reading is old (or failed), so the
+        // status is not a stale error.
+        long at = NaviReader.prefs(this).getLong("read_at", 0);
+        boolean failed = !NaviReader.prefs(this).getString("error", "").isEmpty();
+        if (NaviReader.enabled(this) && (failed || System.currentTimeMillis() - at > 10 * 60_000L)) {
+            worker.execute(() -> {
+                try {
+                    NaviReader.read(this);
+                } catch (IOException e) {
+                    NaviReader.prefs(this).edit().putString("error", Errors.text(e)).apply();
+                }
+                main.post(this::refresh);
+            });
+        }
     }
 
     @Override
@@ -284,13 +298,10 @@ public final class MainActivity extends Activity {
         for (CalAccount a : accounts) {
             String state = !a.error.isEmpty() ? "• " + a.error
                     : "✓ " + getResources().getQuantityString(R.plurals.cal_count, a.enabled(), a.enabled());
-            Button b = button(a.title() + "\n" + state, v -> new AlertDialog.Builder(this)
-                    .setMessage(getString(R.string.cal_remove_q, a.title()))
-                    .setPositiveButton(R.string.cal_remove, (d, w) -> {
-                        CalStore.remove(this, a.id);
-                        refresh();
-                    })
-                    .setNegativeButton(R.string.cancel, null).show());
+            // A tap opens the account (its calendars, «Отключить» inside): one stray touch in
+            // the car must not remove anything.
+            Button b = button(a.title() + "\n" + state, v -> startActivity(
+                    new Intent(this, CalendarActivity.class).putExtra(CalendarActivity.EXTRA_ACCOUNT, a.id)));
             b.setTextSize(16);
             calendarBox.addView(b);
         }

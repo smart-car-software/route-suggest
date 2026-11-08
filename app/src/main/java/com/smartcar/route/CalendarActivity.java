@@ -46,6 +46,9 @@ import java.util.concurrent.Executors;
  * server addresses for the popular services.
  */
 public final class CalendarActivity extends Activity {
+    /** An account's id: open that account (its calendars, «Отключить») instead of adding one. */
+    static final String EXTRA_ACCOUNT = "account";
+
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final Handler main = new Handler(Looper.getMainLooper());
     private LinearLayout root;
@@ -61,6 +64,15 @@ public final class CalendarActivity extends Activity {
         root.setPadding(pad, pad, pad, pad);
         scroll.addView(root);
         setContentView(scroll);
+        String id = getIntent().getStringExtra(EXTRA_ACCOUNT);
+        if (id != null) {
+            for (CalAccount a : CalStore.load(this)) {
+                if (a.id.equals(id)) {
+                    choose(a, true);
+                    return;
+                }
+            }
+        }
         pickService();
     }
 
@@ -133,7 +145,7 @@ public final class CalendarActivity extends Activity {
             worker.execute(() -> {
                 try {
                     CalendarSync.connect(a);
-                    main.post(() -> choose(a));
+                    main.post(() -> choose(a, false));
                 } catch (CalDav.AuthException e) {
                     main.post(() -> {
                         connect.setEnabled(true);
@@ -153,9 +165,10 @@ public final class CalendarActivity extends Activity {
         root.addView(button(getString(R.string.back), v -> pickService()));
     }
 
-    private void choose(CalAccount a) {
+    private void choose(CalAccount a, boolean existing) {
         root.removeAllViews();
-        root.addView(text(a.kind.title, 24, true));
+        root.addView(text(existing ? a.title() : a.kind.title, 24, true));
+        if (existing && !a.error.isEmpty()) root.addView(hint("• " + a.error));
         root.addView(hint(getString(R.string.cal_choose)));
         for (CalAccount.Cal c : a.calendars) {
             CheckBox cb = new CheckBox(this);
@@ -181,6 +194,15 @@ public final class CalendarActivity extends Activity {
         }));
         root.addView(status);
         root.addView(button(getString(R.string.cancel), v -> finish()));
+        if (existing) {
+            root.addView(button(getString(R.string.cal_remove), v -> new android.app.AlertDialog.Builder(this)
+                    .setMessage(getString(R.string.cal_remove_q, a.title()))
+                    .setPositiveButton(R.string.cal_remove, (d, w) -> {
+                        CalStore.remove(this, a.id);
+                        finish();
+                    })
+                    .setNegativeButton(R.string.cancel, null).show()));
+        }
     }
 
     // ------------------------------------------------------------------ views
