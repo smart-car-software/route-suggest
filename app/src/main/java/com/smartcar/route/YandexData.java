@@ -48,10 +48,6 @@ final class YandexData {
     static final String BASE = "https://cloud-api.yandex.ru/maps_common/v1/data/app/databases/";
     static final String ADDRESSES = BASE + ".ext.profile@addresses/snapshot";
     static final String BOOKMARKS = BASE + ".ext.maps_common@ymapsbookmarks1/snapshot";
-    /** Routes built in the Navigator / Maps: from, to, when (collection {@code ridehistory}). */
-    static final String RIDES = BASE + ".ext.maps_common@ymapsridehistory1/snapshot";
-    /** «Последние» places (collection {@code pointshistory}). */
-    static final String POINTS = BASE + ".ext.maps_common@ymapspointshistory1/snapshot";
 
     private static final Pattern LL = Pattern.compile("ll=([-\\d.]+)(?:,|%2C)([-\\d.]+)");
     private static final Pattern DATA = Pattern.compile("[?&]data=([^&]+)");
@@ -132,103 +128,6 @@ final class YandexData {
             out.add(new Place(Place.Kind.BOOKMARK, title.length() > 60 ? title.substring(0, 60) : title,
                     r.optString("description", r.optString("address", "")).trim(),
                     geo == null ? Double.NaN : geo[0], geo == null ? Double.NaN : geo[1]));
-        }
-        return out;
-    }
-
-    /**
-     * The routes of the ride history driven by car, as drives: the start is when the route was
-     * built (about when the car left), the end is the destination — its time unknown, taken as
-     * the start. {@code name} is the destination's title, {@code address} its description.
-     */
-    static List<Trip> rides(String snapshot) throws JSONException {
-        List<Trip> out = new ArrayList<>();
-        for (JSONObject r : records(snapshot)) {
-            String type = r.optString("ride_type_v2", r.optString("ride_type", "car"));
-            if (!"car".equals(type)) continue;
-            double fLat = r.optDouble("from_latitude", Double.NaN), fLon = r.optDouble("from_longitude", Double.NaN);
-            double tLat = r.optDouble("to_latitude", Double.NaN), tLon = r.optDouble("to_longitude", Double.NaN);
-            if (!Geo.valid(tLat, tLon)) continue;
-            long ts;
-            try {
-                ts = java.time.OffsetDateTime.parse(r.optString("timestamp")).toInstant().toEpochMilli();
-            } catch (RuntimeException e) {
-                continue;
-            }
-            if (!Geo.valid(fLat, fLon)) {
-                fLat = tLat;
-                fLon = tLon;
-            }
-            String title = r.optString("to_title", "").trim();
-            out.add(new Trip(0, ts, fLat, fLon, ts, tLat, tLon, title.isEmpty() ? null : title,
-                    r.optString("to_description", "").trim(), true));
-        }
-        return out;
-    }
-
-    /** «Последние» with coordinates, as places for naming. */
-    static List<Place> recent(String snapshot) throws JSONException {
-        List<Place> out = new ArrayList<>();
-        for (JSONObject r : records(snapshot)) {
-            double lat = r.optDouble("latitude", Double.NaN), lon = r.optDouble("longitude", Double.NaN);
-            String title = r.optString("title", "").trim();
-            if (!Geo.valid(lat, lon) || title.isEmpty()) continue;
-            out.add(new Place(Place.Kind.RECENT, title.length() > 60 ? title.substring(0, 60) : title,
-                    r.optString("description", "").trim(), lat, lon));
-        }
-        return out;
-    }
-
-    static String tripsToJson(List<Trip> trips) throws JSONException {
-        JSONArray a = new JSONArray();
-        for (Trip t : trips) {
-            a.put(new JSONObject().put("s", t.startMs).put("fa", t.startLat).put("fo", t.startLon)
-                    .put("ta", t.endLat).put("to", t.endLon).put("n", t.name == null ? "" : t.name)
-                    .put("d", t.address == null ? "" : t.address));
-        }
-        return a.toString();
-    }
-
-    static List<Trip> tripsFromJson(String json) {
-        List<Trip> out = new ArrayList<>();
-        if (json == null || json.isEmpty()) return out;
-        try {
-            JSONArray a = new JSONArray(json);
-            for (int i = 0; i < a.length(); i++) {
-                JSONObject o = a.getJSONObject(i);
-                String n = o.optString("n");
-                out.add(new Trip(0, o.getLong("s"), o.getDouble("fa"), o.getDouble("fo"), o.getLong("s"),
-                        o.getDouble("ta"), o.getDouble("to"), n.isEmpty() ? null : n, o.optString("d"), true));
-            }
-        } catch (JSONException e) {
-            out.clear();
-        }
-        return out;
-    }
-
-    /**
-     * Drives recorded by GPS and routes from the ride history, without counting one drive
-     * twice: a route is dropped when a recorded drive left within 30 min of it and ended within
-     * 500 m of its destination — and then gives that drive its name, if it had none.
-     */
-    static List<Trip> merge(List<Trip> recorded, List<Trip> rides) {
-        List<Trip> out = new ArrayList<>(recorded);
-        for (Trip r : rides) {
-            int same = -1;
-            for (int i = 0; i < out.size() && i < recorded.size(); i++) {
-                Trip g = out.get(i);
-                if (Math.abs(g.startMs - r.startMs) <= 30 * 60_000L
-                        && Geo.meters(g.endLat, g.endLon, r.endLat, r.endLon) <= 500) {
-                    same = i;
-                    break;
-                }
-            }
-            if (same < 0) {
-                out.add(r);
-            } else if (out.get(same).name == null && r.name != null) {
-                Trip g = out.get(same);
-                out.set(same, g.withLabel(r.name, g.address, true));
-            }
         }
         return out;
     }

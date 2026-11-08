@@ -45,7 +45,14 @@
     <string name="st_navi_missing">Яндекс Навигатор не найден — маршрут откроется в Картах</string>
     <string name="st_location_ok">Поездки записываются: %1$d</string>
     <string name="st_location_missing">Нет доступа к геопозиции — поездки не записываются</string>
-    <string name="st_yandex_ok">Яндекс: закладок %1$d, маршрутов в истории %2$d, Дом %3$s, Работа %4$s (обновлено %5$s)</string>
+    <string name="st_yandex_ok">Яндекс: закладок %1$d, Дом %2$s, Работа %3$s (обновлено %4$s)</string>
+    <string name="st_navi_history_ok">История Навигатора: маршрутов %1$d (прочитана %2$s)</string>
+    <string name="st_navi_history_err">История Навигатора: %1$s</string>
+    <string name="st_navi_history_off">История Навигатора не подключена (нужен root через ADB, как для MConfig+)</string>
+    <string name="navi_history_on">Подключить историю Навигатора</string>
+    <string name="navi_history_off">Отключить историю Навигатора</string>
+    <string name="navi_history_hint">Тогда приложение знает, куда вы строили маршрут в Навигаторе на этой магнитоле и когда. Маршруты с телефона не учитываются. В первый раз магнитола спросит «Разрешить отладку?» — разрешите с галочкой «Всегда».</string>
+    <string name="navi_history_connecting">Подключаюсь… Если магнитола спросит «Разрешить отладку?», разрешите.</string>
     <string name="st_yandex_missing">Яндекс не подключён — Дом и Работа узнаются по поездкам</string>
     <string name="cal_section">Календари</string>
     <string name="cal_none">Не подключены. Тогда события в ближайший час не предлагаются.</string>

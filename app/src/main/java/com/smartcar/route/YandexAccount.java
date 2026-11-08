@@ -113,7 +113,6 @@ final class YandexAccount {
     private final CookieJar jar = new CookieJar();
     private long syncedMs;
     private List<Place> places = new ArrayList<>();
-    private List<Trip> rides = new ArrayList<>();
     private String error = "";
 
     YandexAccount(File dir) {
@@ -123,11 +122,11 @@ final class YandexAccount {
         try {
             JSONObject o = new JSONObject(readFile(placesFile));
             syncedMs = o.optLong("synced");
+            // Only HOME, WORK and bookmarks: a cache of v0.3.0 may still hold «последние».
             places = YandexData.fromJson(o.optString("places"));
-            rides = YandexData.tripsFromJson(o.optString("rides"));
+            places.removeIf(p -> p.kind == Place.Kind.RECENT);
         } catch (JSONException e) {
             places = new ArrayList<>();
-            rides = new ArrayList<>();
         }
     }
 
@@ -137,11 +136,6 @@ final class YandexAccount {
 
     synchronized List<Place> places() {
         return new ArrayList<>(places);
-    }
-
-    /** Routes of the Yandex ride history (by car), as drives. */
-    synchronized List<Trip> rides() {
-        return new ArrayList<>(rides);
     }
 
     synchronized long syncedMs() {
@@ -161,7 +155,6 @@ final class YandexAccount {
     synchronized void logout() {
         jar.clear();
         places = new ArrayList<>();
-        rides = new ArrayList<>();
         syncedMs = 0;
         //noinspection ResultOfMethodCallIgnored
         sessionFile.delete();
@@ -170,44 +163,28 @@ final class YandexAccount {
     }
 
     /**
-     * Reads «Дом», «Работа», the bookmarks, the ride history and «последние»; keeps the last
-     * good set when Yandex fails. The two histories are extras: their failure fails nothing.
+     * Reads «Дом», «Работа» and the bookmarks; keeps the last good set when Yandex fails. Not
+     * the account's ride or search history: routes built on the phone just to see how long a
+     * drive takes are in it too, and they are not drives (the user's decision).
      */
     void sync() throws IOException {
         if (!loggedIn()) throw new LoginExpired("нет входа");
         String addr = snapshot(YandexData.ADDRESSES);
         String marks = snapshot(YandexData.BOOKMARKS);
         List<Place> got = new ArrayList<>();
-        List<Trip> gotRides = rides();
         try {
             got.addAll(YandexData.addresses(addr));
             got.addAll(YandexData.bookmarks(marks));
         } catch (JSONException e) {
             throw new IOException("Яндекс ответил не JSON");
         }
-        try {
-            gotRides = YandexData.rides(snapshot(YandexData.RIDES));
-        } catch (LoginExpired e) {
-            throw e;
-        } catch (IOException | JSONException e) {
-            DebugLog.w("Yandex", "ride history: " + e.getMessage());
-        }
-        try {
-            got.addAll(YandexData.recent(snapshot(YandexData.POINTS)));
-        } catch (LoginExpired e) {
-            throw e;
-        } catch (IOException | JSONException e) {
-            DebugLog.w("Yandex", "recent places: " + e.getMessage());
-        }
         synchronized (this) {
             places = got;
-            rides = gotRides;
             syncedMs = System.currentTimeMillis();
             error = "";
             try {
                 writeFile(placesFile, new JSONObject().put("synced", syncedMs)
-                        .put("places", YandexData.toJson(places))
-                        .put("rides", YandexData.tripsToJson(rides)).toString());
+                        .put("places", YandexData.toJson(places)).toString());
             } catch (JSONException e) {
                 throw new IOException(e);
             }

@@ -254,6 +254,7 @@ public final class RouteService extends Service {
             long id = TripStore.get(this).add(labelled);
             String address = Geocode.reverse(t.endLat, t.endLon);
             if (!address.isEmpty()) TripStore.get(this).setAddress(id, address);
+            readNavi(); // the route of this drive, before the Navigator syncs it away
         });
     }
 
@@ -290,6 +291,7 @@ public final class RouteService extends Service {
         while (!now && lastFixAt <= armedFix && System.currentTimeMillis() - armedAt < WAIT_FIX_MS) {
             sleep(1_000);
         }
+        readNavi();
         YandexAccount ya = RouteApp.yandex(this);
         if (ya.loggedIn() && System.currentTimeMillis() - ya.syncedMs() > YANDEX_SYNC_MS) {
             try {
@@ -325,6 +327,17 @@ public final class RouteService extends Service {
         main.post(() -> show(list, now));
     }
 
+    /** The Navigator's own routes, when the user turned that on; a failure is only shown. */
+    void readNavi() {
+        if (!NaviReader.enabled(this)) return;
+        try {
+            NaviReader.read(this);
+        } catch (IOException e) {
+            DebugLog.w(TAG, "Navigator history: " + e.getMessage());
+            NaviReader.prefs(this).edit().putString("error", e.getMessage()).apply();
+        }
+    }
+
     @SuppressWarnings("deprecation") // NetworkInfo: the plain answer on Android 9
     private boolean online() {
         android.net.ConnectivityManager cm = getSystemService(android.net.ConnectivityManager.class);
@@ -348,9 +361,10 @@ public final class RouteService extends Service {
             in.hereLon = here.getLongitude();
         }
         YandexAccount ya = RouteApp.yandex(this);
-        // Drives recorded here and the routes of the Yandex ride history (the Navigator's own).
-        in.trips = YandexData.merge(TripStore.get(this).since(in.nowMs - Suggester.HISTORY_MS),
-                ya.rides());
+        // Drives recorded here and the routes the Navigator on this unit built.
+        List<Trip> navi = new ArrayList<>();
+        for (NaviHistory.Route r : NaviReader.kept(this)) navi.add(r.trip());
+        in.trips = NaviHistory.merge(TripStore.get(this).since(in.nowMs - Suggester.HISTORY_MS), navi);
         in.events = events;
         in.places = ya.places();
         return Suggester.suggest(in);

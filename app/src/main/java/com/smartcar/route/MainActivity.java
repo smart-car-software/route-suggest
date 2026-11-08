@@ -60,6 +60,7 @@ public final class MainActivity extends Activity {
     private LinearLayout yandexBox;
     private Button grantLocation;
     private LinearLayout calendarBox;
+    private Button naviHistory;
     private volatile YandexAccount.Login login;
 
     static void showSuggestions(Context c) {
@@ -113,6 +114,9 @@ public final class MainActivity extends Activity {
         grantLocation = button(getString(R.string.grant_location), v -> requestPermissions(
                 new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 1));
         root.addView(grantLocation, 2);
+        naviHistory = button("", v -> toggleNaviHistory());
+        root.addView(naviHistory);
+        root.addView(hint(getString(R.string.navi_history_hint)));
         root.addView(button(getString(R.string.grant_navi), v -> {
             try {
                 startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS));
@@ -191,6 +195,8 @@ public final class MainActivity extends Activity {
             main.post(() -> {
                 status.setText(s);
                 drawCalendars(accounts);
+                naviHistory.setText(NaviReader.enabled(this) ? R.string.navi_history_off
+                        : R.string.navi_history_on);
                 grantLocation.setVisibility(checkSelfPermission(
                         Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
                         ? View.GONE : View.VISIBLE);
@@ -220,15 +226,52 @@ public final class MainActivity extends Activity {
             }
             String when = ya.syncedMs() > 0 ? DateUtils.getRelativeTimeSpanString(ya.syncedMs())
                     .toString() : "—";
-            line(sb, true, getString(R.string.st_yandex_ok, marks, ya.rides().size(),
+            line(sb, true, getString(R.string.st_yandex_ok, marks,
                     home ? "✓" : "—", work ? "✓" : "—", when), "");
         } else {
             line(sb, false, "", ya.error().isEmpty() ? getString(R.string.st_yandex_missing)
                     : ya.error());
         }
+        if (!NaviReader.enabled(this)) {
+            line(sb, false, "", getString(R.string.st_navi_history_off));
+        } else {
+            String err = NaviReader.prefs(this).getString("error", "");
+            long at = NaviReader.prefs(this).getLong("read_at", 0);
+            line(sb, err.isEmpty(), getString(R.string.st_navi_history_ok, NaviReader.kept(this).size(),
+                    at > 0 ? DateUtils.getRelativeTimeSpanString(at).toString() : "—"),
+                    getString(R.string.st_navi_history_err, err));
+        }
         line(sb, NaviListener.granted(this), getString(R.string.st_listener_ok),
                 getString(R.string.st_listener_missing));
         return sb.toString().trim();
+    }
+
+    /** On: read once now (the unit may ask «allow debugging?»), and from then on at each start. */
+    private void toggleNaviHistory() {
+        if (NaviReader.enabled(this)) {
+            NaviReader.prefs(this).edit().putBoolean("enabled", false).apply();
+            refresh();
+            return;
+        }
+        naviHistory.setEnabled(false);
+        status.setText(R.string.navi_history_connecting);
+        worker.execute(() -> {
+            String err = "";
+            try {
+                NaviReader.read(this);
+                NaviReader.prefs(this).edit().putBoolean("enabled", true).apply();
+            } catch (IOException e) {
+                err = e.getMessage();
+            }
+            final String error = err;
+            main.post(() -> {
+                naviHistory.setEnabled(true);
+                refresh();
+                if (!error.isEmpty()) {
+                    status.postDelayed(() -> status.setText(getString(R.string.st_navi_history_err, error)), 500);
+                }
+            });
+        });
     }
 
     /** Each connected account: its state, and a tap to remove it. */

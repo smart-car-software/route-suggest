@@ -95,47 +95,6 @@ public class YandexDataTest {
     }
 
     @Test
-    public void rideHistoryAndRecentPlaces() throws Exception {
-        String s = snap(rec("ridehistory", "r1", "ride_type", "car", "ride_type_v2", "car",
-                        "timestamp", "2026-11-03T15:05:00.123000+00:00", "from_latitude", 55.8, "from_longitude", 49.1,
-                        "to_latitude", 55.78, "to_longitude", 49.15, "to_title", "Ice Power", "to_description", "Казань, Баумана, 1"),
-                rec("ridehistory", "r2", "ride_type", "masstransit", "timestamp", "2026-11-03T15:05:00+00:00",
-                        "to_latitude", 55.7, "to_longitude", 49.2),
-                rec("ridehistory", "r3", "ride_type", "car", "timestamp", "когда-то", "to_latitude", 55.7, "to_longitude", 49.2),
-                rec("ridehistory", "r4", "ride_type", "car", "timestamp", "2026-11-04T15:05:00+00:00",
-                        "to_latitude", 55.7, "to_longitude", 49.2));
-        List<Trip> r = YandexData.rides(s);
-        assertEquals(2, r.size());
-        assertEquals(SuggesterTest.at(11, 3, 18, 5), r.get(0).startMs, 1000);
-        assertEquals("Ice Power", r.get(0).name);
-        assertEquals("Казань, Баумана, 1", r.get(0).address);
-        assertEquals(49.15, r.get(0).endLon, 1e-9);
-        assertNull(r.get(1).name);
-        assertEquals(55.7, r.get(1).startLat, 1e-9); // no start: the destination stands in
-        List<Trip> back = YandexData.tripsFromJson(YandexData.tripsToJson(r));
-        assertEquals(2, back.size());
-        assertEquals("Ice Power", back.get(0).name);
-
-        List<Place> recent = YandexData.recent(snap(rec("pointshistory", "p1", "title", "Ашан",
-                "latitude", 55.82, "longitude", 49.05, "description", "Казань"),
-                rec("pointshistory", "p2", "title", "", "latitude", 1.0, "longitude", 2.0)));
-        assertEquals(1, recent.size());
-        assertEquals(Place.Kind.RECENT, recent.get(0).kind);
-    }
-
-    @Test
-    public void ridesAndRecordedDrivesCountOnce() {
-        long t = SuggesterTest.at(11, 3, 18, 5);
-        Trip recorded = new Trip(t + 5 * 60_000L, 55.8, 49.1, t + 25 * 60_000L, 55.7802, 49.1501);
-        Trip same = new Trip(0, t, 55.8, 49.1, t, 55.78, 49.15, "Ice Power", "", true);
-        Trip other = new Trip(0, t - 86_400_000L, 55.8, 49.1, t - 86_400_000L, 55.78, 49.15, "Ice Power", "", true);
-        List<Trip> m = YandexData.merge(java.util.Collections.singletonList(recorded), java.util.Arrays.asList(same, other));
-        assertEquals(2, m.size());
-        assertEquals("Ice Power", m.get(0).name); // the recorded drive is named after the route
-        assertEquals(t + 5 * 60_000L, m.get(0).startMs);
-    }
-
-    @Test
     public void cacheRoundTrip() throws Exception {
         List<Place> p = YandexData.fromJson(YandexData.toJson(java.util.Arrays.asList(
                 new Place(Place.Kind.HOME, "Дом", "Ленина 1", 55.8, 49.1),
