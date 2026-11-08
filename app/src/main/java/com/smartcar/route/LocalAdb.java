@@ -104,12 +104,13 @@ final class LocalAdb implements Closeable {
     static LocalAdb connect(Context context, StringBuilder report) throws IOException {
         KeyPair keys = keyPair(context);
         java.util.Map<String, StringBuilder> why = new java.util.LinkedHashMap<>();
+        java.util.List<String> log = new java.util.ArrayList<>(); // written only if no port worked
         for (int port : PORTS) {
             Socket s = new Socket();
             try {
                 s.connect(new InetSocketAddress("127.0.0.1", port), 1500);
             } catch (IOException e) {
-                DebugLog.w("adb", port + ": " + e);
+                log.add(port + ": " + e);
                 StringBuilder b = reason(why, e, false);
                 b.append(b.length() > 0 ? "/" : "").append(port);
                 closeQuietly(s);
@@ -122,11 +123,12 @@ final class LocalAdb implements Closeable {
                 return adb;
             } catch (IOException e) {
                 adb.close();
-                DebugLog.w("adb", port + " handshake: " + e);
+                log.add(port + " handshake: " + e);
                 StringBuilder b = reason(why, e, true);
                 b.append(b.length() > 0 ? "/" : "").append(port);
             }
         }
+        for (String l : log) DebugLog.w("adb", l);
         StringBuilder sb = new StringBuilder();
         for (java.util.Map.Entry<String, StringBuilder> w : why.entrySet()) {
             sb.append(sb.length() > 0 ? ", " : "").append(w.getValue()).append(" — ").append(w.getKey());
