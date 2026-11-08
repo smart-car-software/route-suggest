@@ -216,11 +216,11 @@ public final class MainActivity extends Activity {
             for (Place p : ya.places()) {
                 if (p.kind == Place.Kind.HOME) home = true;
                 else if (p.kind == Place.Kind.WORK) work = true;
-                else marks++;
+                else if (p.kind == Place.Kind.BOOKMARK) marks++;
             }
             String when = ya.syncedMs() > 0 ? DateUtils.getRelativeTimeSpanString(ya.syncedMs())
                     .toString() : "—";
-            line(sb, true, getString(R.string.st_yandex_ok, marks,
+            line(sb, true, getString(R.string.st_yandex_ok, marks, ya.rides().size(),
                     home ? "✓" : "—", work ? "✓" : "—", when), "");
         } else {
             line(sb, false, "", ya.error().isEmpty() ? getString(R.string.st_yandex_missing)

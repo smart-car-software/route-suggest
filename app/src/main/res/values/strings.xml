@@ -45,7 +45,7 @@
     <string name="st_navi_missing">Яндекс Навигатор не найден — маршрут откроется в Картах</string>
     <string name="st_location_ok">Поездки записываются: %1$d</string>
     <string name="st_location_missing">Нет доступа к геопозиции — поездки не записываются</string>
-    <string name="st_yandex_ok">Яндекс: закладок %1$d, Дом %2$s, Работа %3$s (обновлено %4$s)</string>
+    <string name="st_yandex_ok">Яндекс: закладок %1$d, маршрутов в истории %2$d, Дом %3$s, Работа %4$s (обновлено %5$s)</string>
     <string name="st_yandex_missing">Яндекс не подключён — Дом и Работа узнаются по поездкам</string>
     <string name="cal_section">Календари</string>
     <string name="cal_none">Не подключены. Тогда события в ближайший час не предлагаются.</string>

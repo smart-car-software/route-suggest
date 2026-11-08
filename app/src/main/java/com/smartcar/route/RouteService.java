@@ -347,9 +347,12 @@ public final class RouteService extends Service {
             in.hereLat = here.getLatitude();
             in.hereLon = here.getLongitude();
         }
-        in.trips = TripStore.get(this).since(in.nowMs - Suggester.HISTORY_MS);
+        YandexAccount ya = RouteApp.yandex(this);
+        // Drives recorded here and the routes of the Yandex ride history (the Navigator's own).
+        in.trips = YandexData.merge(TripStore.get(this).since(in.nowMs - Suggester.HISTORY_MS),
+                ya.rides());
         in.events = events;
-        in.places = RouteApp.yandex(this).places();
+        in.places = ya.places();
         return Suggester.suggest(in);
     }
 

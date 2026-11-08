@@ -23,7 +23,8 @@ package com.smartcar.route;
  * asked to search for its name.
  */
 final class Place {
-    enum Kind { HOME, WORK, BOOKMARK }
+    /** RECENT: a place from the Navigator's/Maps' «последние» — for names only, never offered. */
+    enum Kind { HOME, WORK, BOOKMARK, RECENT }
 
     final Kind kind;
     final String name;
