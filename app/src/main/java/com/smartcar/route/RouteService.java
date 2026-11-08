@@ -300,13 +300,16 @@ public final class RouteService extends Service {
             }
         }
 
-        // The calendars, straight from their servers; the network may still be coming up.
-        List<CalEvent> events = Collections.emptyList();
+        // The calendars, straight from their servers. Waited for only while the unit has no
+        // network yet (Wi-Fi/LTE come up seconds after the engine), for WAIT_NET_MS at most: a
+        // calendar server that is down must not hold the question up.
+        List<CalEvent> events;
+        long netFrom = System.currentTimeMillis();
         while (true) {
             CalendarSync.Result r = CalendarSync.events(this, System.currentTimeMillis(), ya.places());
             events = r.events;
-            if (r.networkFailures == 0 || now
-                    || System.currentTimeMillis() - armedAt > WAIT_FIX_MS + WAIT_NET_MS) {
+            if (r.networkFailures == 0 || now || online()
+                    || System.currentTimeMillis() - netFrom > WAIT_NET_MS) {
                 break;
             }
             sleep(5_000);
@@ -320,6 +323,13 @@ public final class RouteService extends Service {
         prefs(this).edit().putLong("prompt_at", System.currentTimeMillis())
                 .putInt("prompt_boot", bootCount()).apply();
         main.post(() -> show(list, now));
+    }
+
+    @SuppressWarnings("deprecation") // NetworkInfo: the plain answer on Android 9
+    private boolean online() {
+        android.net.ConnectivityManager cm = getSystemService(android.net.ConnectivityManager.class);
+        android.net.NetworkInfo ni = cm == null ? null : cm.getActiveNetworkInfo();
+        return ni != null && ni.isConnected();
     }
 
     private int bootCount() {
