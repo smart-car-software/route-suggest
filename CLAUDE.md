@@ -17,18 +17,27 @@ service), Java 21, GPL-3.0.
 
 No Android SDK or JDK on the Pi that runs the agents: CI (`.github/workflows/ci.yml`) is the build.
 Tag `v*` → `release.yml` → GitHub Release with `route-suggest-<tag>.apk`. Repo secrets:
-`KEYSTORE_BASE64` / `KEY_PASSWORD` (PKCS12, alias `key0`, OpenBao `kv/apps/route-suggest`),
-`CAR_API_URL` / `CAR_API_TOKEN` (calendar-bot's car endpoint, baked into BuildConfig).
+`KEYSTORE_BASE64` / `KEY_PASSWORD` (PKCS12, alias `key0`, OpenBao `kv/apps/route-suggest`).
+The user's Mac has a Claude session with Android Studio and an Android 9 arm64 emulator
+(`KX11_API28`, the modded Navigator installed): ask it to build, install and check there.
 
 ## Architecture
 
 - Pure, tested: `Suggester` (the rows and their order — the decision logic lives here),
   `TripDetector` (GPS fixes → drives), `YandexData` (DataSync snapshots → places), `CookieJar`,
-  `CalEvent.parse`, `Geocode.shortAddress`.
+  `EventFilter` (which events are worth a route), `ICal` (VEVENTs, RRULE expansion), the XML of
+  `CalDav` / `Ews`, `Ntlm` (NTLMv2 + MD4), `RawHttp`, `Geocode.shortAddress`.
+- Calendars are read directly, no server of ours (the user's decision): CalDAV with Basic
+  (iCloud, Yandex, Mail.ru, any) and EWS with NTLM/Basic (on-premise Exchange). `RawHttp` is a
+  socket HTTP/1.1 client because HttpURLConnection on Android refuses PROPFIND/REPORT and NTLM
+  needs one connection. Passwords: `CalStore`, AES-GCM with an Android Keystore key. Google and
+  Microsoft 365 need OAuth — not supported.
 - `RouteService` (foreground) records drives and puts the question once per start (boot, or the
   first fix / screen-on after 10+ minutes off). `ReplyReceiver` gets the wheel's answer.
 - Data sources: own GPS for the drives (the Navigator exposes no destination — see README),
   `NaviListener` only for «is it guiding now», Yandex DataSync via the app's own Yandex login
-  (magic link, like calendar-bot's `calbot/yandex.py`), calendar-bot `GET /v1/car/events`.
+  (magic link, like calendar-bot's `calbot/yandex.py`), the calendars (above).
+- `build_route_on_map` works unsigned (checked on the emulator): it opens the route overview,
+  the driver presses «Поехали».
 - Car Notification Service's contract is copied in `NotifyClient` (its docs/API.md).
 - Logcat never gets coordinates, addresses or event titles.
