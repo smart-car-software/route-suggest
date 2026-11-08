@@ -40,9 +40,8 @@ import java.util.Map;
  * every route with its time — two deltas for building, one more for «Поехали». Found on the
  * emulator with the Monjaro mod 30.3.0. Pure.
  *
- * <p>Field layout inside a record: {@code u32 len, name}, then {@code 01 00 00 00 01}, a type
- * byte, the value: 06 — a timestamp (8 zero bytes, then int64 ms), 03 — float64, 04 —
- * {@code u32 len, UTF-8}. A record starts with {@code u32 13, "pointshistory"}, then its id.
+ * <p>A record starts with {@code u32 13, "pointshistory"}, a service header, {@code u32 len, id}
+ * ({@link #recordId}); then its fields ({@link #field}). Checked byte by byte on the emulator.
  */
 final class NaviHistory {
     static final String DB = "/data/data/ru.yandex.yandexnavi/files/datasync/"
@@ -104,7 +103,7 @@ final class NaviHistory {
         for (int k = 0; k < starts.size(); k++) {
             int from = starts.get(k) + COLLECTION.length;
             int to = k + 1 < starts.size() ? starts.get(k + 1) : v.length;
-            String id = string(v, from, to);
+            String id = recordId(v, from, to);
             if (id == null) continue;
             Point p = new Point(id);
             Object t = field(v, from, to, "last_used");
@@ -135,7 +134,7 @@ final class NaviHistory {
             boolean delta = n < deltas.size();
             for (Point p : records(all.get(n))) {
                 Point k = known.computeIfAbsent(p.id, Point::new);
-                if (Geo.valid(p.lat, p.lon)) {
+                if (place(p.lat, p.lon)) {
                     k.lat = p.lat;
                     k.lon = p.lon;
                 }
@@ -147,7 +146,7 @@ final class NaviHistory {
         List<Route> out = new ArrayList<>();
         for (Point k : known.values()) {
             List<Long> ts = times.get(k.id);
-            if (ts == null || !Geo.valid(k.lat, k.lon)) continue;
+            if (ts == null || !place(k.lat, k.lon)) continue;
             ts.sort(null);
             long groupEnd = -1;
             for (int i = 0; i < ts.size(); i++) {
@@ -208,29 +207,59 @@ final class NaviHistory {
 
     // ------------------------------------------------------------------ the archive
 
+    /**
+     * A field's value. After the name: {@code u32 op} (2 — set when the record is created, 1 —
+     * changed), {@code u8 1}, {@code u32 type}, then the value at +9: 03 — float64; 04 —
+     * {@code u32 len, UTF-8}; 06 — five zero bytes, then int64 ms at +14; 00 — none.
+     */
     private static Object field(byte[] v, int from, int to, String name) {
         byte[] key = withLength(name);
+        ByteBuffer b = ByteBuffer.wrap(v).order(ByteOrder.LITTLE_ENDIAN);
         for (int i = indexOf(v, key, from); i >= 0 && i < to; i = indexOf(v, key, i + 1)) {
             int p = i + key.length;
-            if (p + 6 > to) return null;
-            if (v[p] != 1 || v[p + 1] != 0 || v[p + 2] != 0 || v[p + 3] != 0 || v[p + 4] != 1) continue;
-            int type = v[p + 5] & 0xff;
-            p += 6;
-            ByteBuffer b = ByteBuffer.wrap(v).order(ByteOrder.LITTLE_ENDIAN);
+            if (p + 9 > to) return null;
+            int op = b.getInt(p);
+            if ((op != 1 && op != 2) || v[p + 4] != 1) continue;
+            int type = b.getInt(p + 5);
             switch (type) {
                 case 0x06:
-                    if (p + 16 > to) return null;
-                    return b.getLong(p + 8);
+                    if (p + 22 > to) return null;
+                    return b.getLong(p + 14);
                 case 0x03:
-                    if (p + 8 > to) return null;
-                    return b.getDouble(p);
+                    if (p + 17 > to) return null;
+                    return b.getDouble(p + 9);
                 case 0x04:
-                    return string(v, p, to);
+                    return string(v, p + 9, to);
                 default:
                     return null;
             }
         }
         return null;
+    }
+
+    /**
+     * The record's id: after the collection's name comes a service header (22 bytes in mod
+     * 30.3.0), then {@code u32 len, id}. Found as the first length 16–64 followed by that many
+     * id characters, so a header of another length does not break it.
+     */
+    private static String recordId(byte[] v, int from, int to) {
+        ByteBuffer b = ByteBuffer.wrap(v).order(ByteOrder.LITTLE_ENDIAN);
+        for (int p = from; p + 4 <= to && p < from + 96; p++) {
+            int len = b.getInt(p);
+            if (len < 16 || len > 64 || p + 4 + len > to) continue;
+            boolean ok = true;
+            for (int k = 0; k < len && ok; k++) {
+                int c = v[p + 4 + k] & 0xff;
+                ok = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')
+                        || c == '_' || c == '.' || c == '-';
+            }
+            if (ok) return new String(v, p + 4, len, StandardCharsets.US_ASCII);
+        }
+        return null;
+    }
+
+    private static boolean place(double lat, double lon) {
+        return Geo.valid(lat, lon) && Math.abs(lat) > 1e-6 && Math.abs(lon) > 1e-6;
     }
 
     /** {@code u32 len, bytes} at p, as UTF-8; null when it does not fit. */
@@ -275,8 +304,10 @@ final class NaviHistory {
             JSONArray a = new JSONArray(json);
             for (int i = 0; i < a.length(); i++) {
                 JSONObject o = a.getJSONObject(i);
-                out.add(new Route(o.getString("id"), o.getLong("ms"), o.getDouble("lat"), o.getDouble("lon"),
-                        o.optString("t"), o.optString("d")));
+                Route r = new Route(o.getString("id"), o.getLong("ms"), o.getDouble("lat"), o.getDouble("lon"),
+                        o.optString("t"), o.optString("d"));
+                // v0.4.0 kept unparsed routes (no id, coordinates ~0): drop them
+                if (!r.id.isEmpty() && place(r.lat, r.lon)) out.add(r);
             }
         } catch (JSONException e) {
             out.clear();

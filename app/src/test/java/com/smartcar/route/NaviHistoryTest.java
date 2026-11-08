@@ -60,16 +60,20 @@ public class NaviHistoryTest {
             return str("serialization::archive").raw(0x14, 0x00, 0x04, 0x04, 0x04, 0x08, 0x01, 0x00, 0x00, 0x00);
         }
 
+        int op = 2;
+
+        /** The collection, the 22-byte service header seen in mod 30.3.0, the id. */
         Archive record(String id) {
-            return str("pointshistory").str(id);
+            return str("pointshistory").raw(0, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+                    .str(id);
         }
 
         Archive field(String name, int type) {
-            return str(name).raw(1, 0, 0, 0, 1, type);
+            return str(name).u32(op).raw(1).u32(type);
         }
 
         Archive time(String name, long ms) {
-            field(name, 0x06).raw(0, 0, 0, 0, 0, 0, 0, 0);
+            field(name, 0x06).raw(0, 0, 0, 0, 0);
             ByteBuffer x = ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN).putLong(ms);
             b.write(x.array(), 0, 8);
             return this;
@@ -92,8 +96,11 @@ public class NaviHistoryTest {
     }
 
     static byte[] delta(String id, long ms, double lat, double lon, String title) {
-        Archive a = new Archive().head().record(id).text("description", "City of Kazan")
-                .text("indoor_level", "").time("last_used", ms).dbl("latitude", lat).dbl("longitude", lon);
+        Archive a = new Archive();
+        a.op = title == null ? 1 : 2;
+        a.head().record(id).text("description", "City of Kazan");
+        a.field("indoor_level", 0x00);
+        a.time("last_used", ms).dbl("latitude", lat).dbl("longitude", lon);
         if (title != null) a.text("title", title);
         return a.text("point_context", "").bytes();
     }
@@ -115,7 +122,7 @@ public class NaviHistoryTest {
 
     @Test
     public void buildingAndGoAreOneRouteTheSnapshotGivesNoTimes() {
-        String a = "_JQPJWWB1RkSkZkyOsMeKGQc-Y5UMjoQ", org = "ymapsbm1://org?oid=95813866834";
+        String a = "_JQPJWWB1RkSkZkyOsMeKGQc-Y5UMjoQ", org = "_12KKIc.ZRLGaImLrgK7XaAKDswMX7OQ";
         List<byte[]> deltas = Arrays.asList(
                 delta(a, T - 8_000L, 55.7512, 49.2101, null),     // building: two deltas
                 delta(a, T - 8_000L, 55.7512, 49.2101, null),
@@ -125,7 +132,7 @@ public class NaviHistoryTest {
         // A snapshot from the account: the phone's route to somewhere else gives no drive, only
         // a name for a place the deltas know.
         byte[] snapshot = new Archive().head()
-                .record("phone-only").time("last_used", T).dbl("latitude", 55.6).dbl("longitude", 49.3).text("title", "С телефона")
+                .record("_PHONEonlyPHONEonlyPHONEonly0001").time("last_used", T).dbl("latitude", 55.6).dbl("longitude", 49.3).text("title", "С телефона")
                 .record(a).time("last_used", T + 5).dbl("latitude", 55.7512).dbl("longitude", 49.2101).text("title", "Pobedy Avenue")
                 .bytes();
         List<NaviHistory.Route> r = NaviHistory.routes(deltas, Collections.singletonList(snapshot));
