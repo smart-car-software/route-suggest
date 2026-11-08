@@ -54,7 +54,7 @@
     <string name="cal_add_hint">Вход по логину и паролю. Пароль хранится только в машине, зашифрованным. Из календаря берутся события, которые идут сейчас или начнутся в течение часа, и их место.</string>
     <string name="cal_google">Google Календарь по паролю подключить нельзя: Google пускает только через свой вход (OAuth). Можно добавить его в iCloud или Яндекс Календарь на телефоне и подключить тот.</string>
     <string name="cal_server">Адрес сервера CalDAV (https://…)</string>
-    <string name="cal_server_optional">Адрес почты на работе — если не найдётся сам (необязательно)</string>
+    <string name="cal_server_optional">Сервер или веб-почта (если не найдётся сам)</string>
     <string name="cal_password">Пароль</string>
     <string name="cal_app_password">Пароль приложения</string>
     <string name="cal_connect">Подключить</string>

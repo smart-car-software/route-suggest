@@ -96,10 +96,10 @@ public final class CalendarActivity extends Activity {
                 root.addView(iv, lp);
             }
         }
+        // CalDAV: the server first (it is needed); Exchange: last (it is found by itself).
         EditText server = null;
-        if (kind.asksServer()) {
-            server = field(kind == CalAccount.Kind.EXCHANGE ? getString(R.string.cal_server_optional)
-                    : getString(R.string.cal_server), InputType.TYPE_TEXT_VARIATION_URI);
+        if (kind == CalAccount.Kind.CALDAV) {
+            server = field(getString(R.string.cal_server), InputType.TYPE_TEXT_VARIATION_URI);
             root.addView(server);
         }
         EditText login = field(kind.loginHint, InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
@@ -107,6 +107,10 @@ public final class CalendarActivity extends Activity {
                 ? R.string.cal_password : R.string.cal_app_password), InputType.TYPE_TEXT_VARIATION_PASSWORD);
         root.addView(login);
         root.addView(password);
+        if (kind == CalAccount.Kind.EXCHANGE) {
+            server = field(getString(R.string.cal_server_optional), InputType.TYPE_TEXT_VARIATION_URI);
+            root.addView(server);
+        }
         TextView status = hint("");
         final EditText serverField = server;
         Button connect = button(getString(R.string.cal_connect), null);
