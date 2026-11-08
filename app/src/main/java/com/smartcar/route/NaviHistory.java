@@ -48,8 +48,8 @@ final class NaviHistory {
             + ".ext.maps_common@ymapspointshistory1/db.sqlite";
     /** Building and «Поехали» within this are one route. */
     static final long SAME_ROUTE_MS = 3 * 60_000L;
-    /** «Поехали» comes this long after building, at least (seen: 6–40 s). */
-    static final long GO_AFTER_MS = 2_000L;
+    /** Deltas this close are one burst (building: two within ~0.5 s; AutoGo's «Поехали» ~1 s on). */
+    static final long BURST_MS = 1_500L;
 
     private static final byte[] COLLECTION = withLength("pointshistory");
 
@@ -166,31 +166,56 @@ final class NaviHistory {
             }
         }
         List<Route> out = new ArrayList<>();
+        java.util.Set<Long> used = new java.util.HashSet<>();
         for (Point k : known.values()) {
             List<Long> ts = times.get(k.id);
             if (ts == null || !place(k.lat, k.lon)) continue;
             ts.sort(null);
-            int first = 0;
-            for (int i = 0; i < ts.size(); i++) {
-                boolean last = i + 1 == ts.size() || ts.get(i + 1) - ts.get(i) > SAME_ROUTE_MS;
-                if (!last) continue;
-                // Building writes two deltas within a second; «Поехали» one more — seconds later
-                // by hand, ~1 s later pressed by AutoGoService. A route only looked at (no
-                // «Поехали») is not a drive.
-                long a = ts.get(first), b = ts.get(i);
-                boolean go = b - a > GO_AFTER_MS;
-                if (!go && guidanceStarts != null) {
-                    for (long g : guidanceStarts) if (g >= a - 5_000L && g <= b + 10_000L) go = true;
-                } else if (!go) {
-                    go = i - first + 1 >= 3;
-                }
-                if (go) {
-                    out.add(new Route(k.id, ts.get(i), k.lat, k.lon, k.title, k.description, k.org));
-                }
-                first = i + 1;
+            for (long ms : drives(ts, guidanceStarts, used)) {
+                out.add(new Route(k.id, ms, k.lat, k.lon, k.title, k.description, k.org));
             }
         }
         out.sort((a, b) -> Long.compare(a.ms, b.ms));
+        return out;
+    }
+
+    /**
+     * The times a place was driven to, out of its delta times (sorted). Deltas come in bursts
+     * (gaps of {@link #BURST_MS} at most): building writes two, «Поехали» by hand one more seconds
+     * later, «Поехали» pressed by AutoGoService lands in the building's burst. A burst is a drive
+     * when the Navigator started leading near it (−5…+10 s; each start counts once) — or, without
+     * that signal, when it has 3+ deltas or is a lone delta within {@link #SAME_ROUTE_MS} of a
+     * building. A route only looked at is no drive. The drive's time is its burst's end.
+     */
+    static List<Long> drives(List<Long> ts, List<Long> guidanceStarts, java.util.Set<Long> used) {
+        List<long[]> bursts = new ArrayList<>(); // {start, end, count}
+        for (long t : ts) {
+            long[] last = bursts.isEmpty() ? null : bursts.get(bursts.size() - 1);
+            if (last != null && t - last[1] <= BURST_MS) {
+                last[1] = t;
+                last[2]++;
+            } else {
+                bursts.add(new long[]{t, t, 1});
+            }
+        }
+        List<Long> out = new ArrayList<>();
+        for (int i = 0; i < bursts.size(); i++) {
+            long[] b = bursts.get(i);
+            boolean go = false;
+            if (guidanceStarts != null) {
+                for (long g : guidanceStarts) {
+                    if (!used.contains(g) && g >= b[0] - 5_000L && g <= b[1] + 10_000L) {
+                        used.add(g);
+                        go = true;
+                        break;
+                    }
+                }
+            } else {
+                long[] prev = i > 0 ? bursts.get(i - 1) : null;
+                go = b[2] >= 3 || (b[2] == 1 && prev != null && prev[2] >= 2 && b[0] - prev[1] <= SAME_ROUTE_MS);
+            }
+            if (go) out.add(b[1]);
+        }
         return out;
     }
 

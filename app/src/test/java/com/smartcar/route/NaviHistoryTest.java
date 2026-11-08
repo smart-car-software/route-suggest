@@ -134,10 +134,12 @@ public class NaviHistoryTest {
                 delta(a, T - 8_000L, 55.7512, 49.2101, null),
                 delta(a, T, 55.7512, 49.2101, null),              // «Go»
                 delta(a, T + day - 20_000L, 55.7512, 49.2101, null), // the next day, again
+                delta(a, T + day - 19_700L, 55.7512, 49.2101, null),
                 delta(a, T + day, 55.7512, 49.2101, null),
                 delta(a, T + 2 * day, 55.7512, 49.2101, null),    // only looked at: no «Go»
                 delta(a, T + 2 * day + 400, 55.7512, 49.2101, null),
                 delta(org, T + hour - 10_000L, 55.7988, 49.1063, "Kazan Kremlin", true),
+                delta(org, T + hour - 9_000L, 55.7988, 49.1063, "Kazan Kremlin", true),
                 delta(org, T + hour, 55.7988, 49.1063, "Kazan Kremlin", true));
         // A snapshot from the account: the phone's route to somewhere else gives no drive, only
         // a name for a place the deltas know.
@@ -195,7 +197,8 @@ public class NaviHistoryTest {
         assertTrue(k.org);
         assertTrue(!a.org);
 
-        List<NaviHistory.Route> r = NaviHistory.routes(Arrays.asList(hex(D15), hex(D17), hex(D20)),
+        // delta:15 and :16 (the same bytes but op) are the building, :17 «Go»
+        List<NaviHistory.Route> r = NaviHistory.routes(Arrays.asList(hex(D15), hex(D15), hex(D17), hex(D20)),
                 Collections.emptyList());
         // building + «Go» are one route; delta:20 alone (its building not given) is no «Go»
         assertEquals(1, r.size());
@@ -222,6 +225,23 @@ public class NaviHistoryTest {
         // Without it: three deltas are a «Go», two are only a look.
         assertEquals(1, NaviHistory.routes(both, Collections.emptyList(), null).size());
         assertEquals(0, NaviHistory.routes(look, Collections.emptyList(), null).size());
+
+        // The emulator's other case: a drive at 22:38:13.878–15.221 (AutoGo), then the same
+        // place only looked at 98 s later. Not one group: one drive, at the drive's time.
+        List<byte[]> mixed = Arrays.asList(delta(a, t0, 55.78, 49.15, null), delta(a, t0 + 347, 55.78, 49.15, null),
+                delta(a, t0 + 1343, 55.78, 49.15, null), delta(a, t0 + 98_952, 55.78, 49.15, null),
+                delta(a, t0 + 99_248, 55.78, 49.15, null));
+        List<NaviHistory.Route> m = NaviHistory.routes(mixed, Collections.emptyList(),
+                Collections.singletonList(t0 + 1065));
+        assertEquals(1, m.size());
+        assertEquals(t0 + 1343, m.get(0).ms);
+        assertEquals(1, NaviHistory.routes(mixed, Collections.emptyList(), null).size());
+        // By hand: building, «Go» 20 s later, the guidance start right after the «Go» — one drive.
+        List<byte[]> hand = Arrays.asList(delta(a, t0, 55.78, 49.15, null), delta(a, t0 + 300, 55.78, 49.15, null),
+                delta(a, t0 + 20_000, 55.78, 49.15, null));
+        assertEquals(1, NaviHistory.routes(hand, Collections.emptyList(),
+                Collections.singletonList(t0 + 20_400)).size());
+        assertEquals(1, NaviHistory.routes(hand, Collections.emptyList(), null).size());
     }
 
     @Test
