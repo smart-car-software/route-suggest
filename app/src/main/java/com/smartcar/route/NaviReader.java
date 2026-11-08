@@ -56,6 +56,27 @@ final class NaviReader {
         return prefs(c).getBoolean("enabled", false);
     }
 
+    /** The Navigator started leading a route: kept to tell a drive from a route looked at. */
+    static void guidanceStarted(Context c, long ms) {
+        List<Long> all = guidanceStarts(c);
+        all.add(ms);
+        while (all.size() > 300) all.remove(0);
+        StringBuilder sb = new StringBuilder();
+        for (long t : all) sb.append(sb.length() > 0 ? "," : "").append(t);
+        prefs(c).edit().putString("guidance", sb.toString()).apply();
+    }
+
+    static List<Long> guidanceStarts(Context c) {
+        List<Long> out = new ArrayList<>();
+        for (String s : prefs(c).getString("guidance", "").split(",")) {
+            try {
+                if (!s.isEmpty()) out.add(Long.parseLong(s));
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return out;
+    }
+
     static List<NaviHistory.Route> kept(Context c) {
         return NaviHistory.fromJson(prefs(c).getString("routes", ""));
     }
@@ -101,7 +122,7 @@ final class NaviReader {
             journal.delete();
         }
         List<NaviHistory.Route> all = NaviHistory.accumulate(kept(c),
-                NaviHistory.routes(deltas, others), KEEP);
+                NaviHistory.routes(deltas, others, NaviListener.granted(c) ? guidanceStarts(c) : null), KEEP);
         try {
             prefs(c).edit().putString("routes", NaviHistory.toJson(all))
                     .putLong("read_at", System.currentTimeMillis()).putString("error", "").apply();

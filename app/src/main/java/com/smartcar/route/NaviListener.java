@@ -111,7 +111,10 @@ public final class NaviListener extends NotificationListenerService {
             guiding = now;
             changedMs = System.currentTimeMillis();
             DebugLog.i("Navi", now ? "route guidance on" : "route guidance off");
-            if (now) RouteService.markNavigated(this);
+            if (now) {
+                RouteService.markNavigated(this);
+                NaviReader.guidanceStarted(this, changedMs);
+            }
         }
     }
 }

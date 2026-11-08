@@ -204,6 +204,27 @@ public class NaviHistoryTest {
     }
 
     @Test
+    public void goPressedByAutoGoComesFast() {
+        // Seen on the emulator: building at 13.878 and 14.225, «Go» pressed by AutoGo → 15.221,
+        // guidance on at 14.943. Only 1.3 s: the guidance start (or the third delta) tells.
+        String a = "_bb6eiWCQRNWbb6eiWCQRNWbb6eiWCQ";
+        long t0 = T;
+        List<byte[]> auto = Arrays.asList(delta(a, t0, 55.78, 49.15, "Спортзал"),
+                delta(a, t0 + 347, 55.78, 49.15, null), delta(a, t0 + 1343, 55.78, 49.15, null));
+        List<byte[]> look = Arrays.asList(delta(a, t0 + 600_000L, 55.78, 49.15, null),
+                delta(a, t0 + 600_300L, 55.78, 49.15, null));
+        List<byte[]> both = new ArrayList<>(auto);
+        both.addAll(look);
+        // With the notification listener: the guidance start inside the group decides.
+        assertEquals(1, NaviHistory.routes(both, Collections.emptyList(),
+                Collections.singletonList(t0 + 1065)).size());
+        assertEquals(0, NaviHistory.routes(both, Collections.emptyList(), Collections.emptyList()).size());
+        // Without it: three deltas are a «Go», two are only a look.
+        assertEquals(1, NaviHistory.routes(both, Collections.emptyList(), null).size());
+        assertEquals(0, NaviHistory.routes(look, Collections.emptyList(), null).size());
+    }
+
+    @Test
     public void keptAcrossSyncs() throws Exception {
         NaviHistory.Route old = new NaviHistory.Route("x", T, 55.7, 49.2, "A", "", false);
         NaviHistory.Route again = new NaviHistory.Route("x", T + 60_000L, 55.7, 49.2, "A", "", false); // «Go» seen later

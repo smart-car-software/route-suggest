@@ -138,6 +138,15 @@ final class NaviHistory {
      * and names, never a time: a route built on the phone is not a drive.
      */
     static List<Route> routes(List<byte[]> deltas, List<byte[]> others) {
+        return routes(deltas, others, null);
+    }
+
+    /**
+     * @param guidanceStarts when the Navigator started leading a route ({@link NaviListener}),
+     *                       or null when that is not known (no notification access): then a
+     *                       third delta stands for «Поехали»
+     */
+    static List<Route> routes(List<byte[]> deltas, List<byte[]> others, List<Long> guidanceStarts) {
         Map<String, Point> known = new LinkedHashMap<>();
         Map<String, List<Long>> times = new HashMap<>();
         List<byte[]> all = new ArrayList<>(deltas);
@@ -165,9 +174,17 @@ final class NaviHistory {
             for (int i = 0; i < ts.size(); i++) {
                 boolean last = i + 1 == ts.size() || ts.get(i + 1) - ts.get(i) > SAME_ROUTE_MS;
                 if (!last) continue;
-                // Building writes two deltas within a second; «Поехали» one more, seconds later.
-                // A route only looked at (no «Поехали») is not a drive.
-                if (ts.get(i) - ts.get(first) > GO_AFTER_MS) {
+                // Building writes two deltas within a second; «Поехали» one more — seconds later
+                // by hand, ~1 s later pressed by AutoGoService. A route only looked at (no
+                // «Поехали») is not a drive.
+                long a = ts.get(first), b = ts.get(i);
+                boolean go = b - a > GO_AFTER_MS;
+                if (!go && guidanceStarts != null) {
+                    for (long g : guidanceStarts) if (g >= a - 5_000L && g <= b + 10_000L) go = true;
+                } else if (!go) {
+                    go = i - first + 1 >= 3;
+                }
+                if (go) {
                     out.add(new Route(k.id, ts.get(i), k.lat, k.lon, k.title, k.description, k.org));
                 }
                 first = i + 1;
