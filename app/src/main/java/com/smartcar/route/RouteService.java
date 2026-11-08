@@ -259,9 +259,17 @@ public final class RouteService extends Service {
 
     // ------------------------------------------------------------------ «Куда едем?»
 
+    /**
+     * The pause between two questions holds within one boot only: a boot is the ignition, so
+     * after one the question always comes (and the service restarted by the system mid-drive
+     * does not ask again).
+     */
     private void armPrompt(boolean now) {
-        long last = prefs(this).getLong("prompt_at", 0);
-        if (!now && System.currentTimeMillis() - last < PROMPT_GAP_MS) return;
+        SharedPreferences p = prefs(this);
+        boolean sameBoot = p.getInt("prompt_boot", -1) == bootCount();
+        if (!now && sameBoot && System.currentTimeMillis() - p.getLong("prompt_at", 0) < PROMPT_GAP_MS) {
+            return;
+        }
         if (promptRunning) return;
         promptRunning = true;
         final long armedAt = System.currentTimeMillis();
@@ -317,8 +325,14 @@ public final class RouteService extends Service {
             return;
         }
         List<Suggestion> list = suggestions(events);
-        prefs(this).edit().putLong("prompt_at", System.currentTimeMillis()).apply();
+        prefs(this).edit().putLong("prompt_at", System.currentTimeMillis())
+                .putInt("prompt_boot", bootCount()).apply();
         main.post(() -> show(list, now));
+    }
+
+    private int bootCount() {
+        return android.provider.Settings.Global.getInt(getContentResolver(),
+                android.provider.Settings.Global.BOOT_COUNT, -1);
     }
 
     /** What to offer now, from everything known. */
