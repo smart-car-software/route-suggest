@@ -446,6 +446,8 @@ public final class RouteService extends Service {
                     .put("s", s.toJson()).toString()).apply();
         } catch (JSONException ignored) {
         }
+        // Arm before the Navigator comes up: its route overview is what AutoGoService waits for.
+        if (s.hasGeo()) AutoGoService.arm(c);
         return Navigator.open(c, s);
     }
 

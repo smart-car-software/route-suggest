@@ -61,6 +61,8 @@ public final class MainActivity extends Activity {
     private Button grantLocation;
     private LinearLayout calendarBox;
     private Button naviHistory;
+    private Button autoGo;
+    private Button autoGoGrant;
     private volatile YandexAccount.Login login;
 
     static void showSuggestions(Context c) {
@@ -114,6 +116,14 @@ public final class MainActivity extends Activity {
         grantLocation = button(getString(R.string.grant_location), v -> requestPermissions(
                 new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 1));
         root.addView(grantLocation, 2);
+        autoGo = button("", v -> {
+            RouteService.prefs(this).edit().putBoolean(AutoGoService.PREF, !AutoGoService.on(this)).apply();
+            refresh();
+        });
+        root.addView(autoGo);
+        autoGoGrant = button(getString(R.string.autogo_grant), v -> grantAutoGo());
+        root.addView(autoGoGrant);
+        root.addView(hint(getString(R.string.autogo_hint)));
         naviHistory = button("", v -> toggleNaviHistory());
         root.addView(naviHistory);
         root.addView(hint(getString(R.string.navi_history_hint)));
@@ -211,6 +221,9 @@ public final class MainActivity extends Activity {
                 drawCalendars(accounts);
                 naviHistory.setText(NaviReader.enabled(this) ? R.string.navi_history_off
                         : R.string.navi_history_on);
+                autoGo.setText(AutoGoService.on(this) ? R.string.autogo_on : R.string.autogo_off);
+                autoGoGrant.setVisibility(AutoGoService.on(this) && !AutoGoService.granted(this)
+                        ? View.VISIBLE : View.GONE);
                 grantLocation.setVisibility(checkSelfPermission(
                         Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
                         ? View.GONE : View.VISIBLE);
@@ -255,9 +268,39 @@ public final class MainActivity extends Activity {
                     at > 0 ? DateUtils.getRelativeTimeSpanString(at).toString() : "—"),
                     getString(R.string.st_navi_history_err, err));
         }
+        if (!AutoGoService.on(this)) line(sb, false, "", getString(R.string.st_autogo_off));
+        else line(sb, AutoGoService.granted(this), getString(R.string.st_autogo_ok),
+                getString(R.string.st_autogo_missing));
         line(sb, NaviListener.granted(this), getString(R.string.st_listener_ok),
                 getString(R.string.st_listener_missing));
         return sb.toString().trim();
+    }
+
+    /** The accessibility service: as root through the unit's adb, else Android's own screen. */
+    private void grantAutoGo() {
+        autoGoGrant.setEnabled(false);
+        worker.execute(() -> {
+            boolean done;
+            try {
+                AutoGoService.enableAsRoot(this);
+                done = true;
+            } catch (java.io.IOException e) {
+                DebugLog.w("AutoGo", "as root: " + Errors.text(e));
+                done = false;
+            }
+            final boolean ok = done;
+            main.post(() -> {
+                autoGoGrant.setEnabled(true);
+                if (!ok) {
+                    try {
+                        startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
+                    } catch (RuntimeException e) {
+                        status.setText(R.string.grant_navi_failed);
+                    }
+                }
+                status.postDelayed(this::refresh, 1500);
+            });
+        });
     }
 
     /** On: read once now (the unit may ask «allow debugging?»), and from then on at each start. */

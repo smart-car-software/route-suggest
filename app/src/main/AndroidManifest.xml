@@ -82,6 +82,19 @@
         </receiver>
 
         <service
+            android:name=".AutoGoService"
+            android:exported="true"
+            android:label="@string/autogo_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/autogo" />
+        </service>
+
+        <service
             android:name=".NaviListener"
             android:exported="true"
             android:label="@string/app_name"
