@@ -290,26 +290,6 @@ public final class RouteService extends Service {
         while (!now && lastFixAt <= armedFix && System.currentTimeMillis() - armedAt < WAIT_FIX_MS) {
             sleep(1_000);
         }
-        List<CalEvent> events = Collections.emptyList();
-        String calendarError = "";
-        if (CalendarClient.configured()) {
-            while (true) {
-                try {
-                    events = CalendarClient.fetch();
-                    calendarError = "";
-                    break;
-                } catch (IOException e) {
-                    calendarError = e.getMessage();
-                    if (now || System.currentTimeMillis() - armedAt > WAIT_FIX_MS + WAIT_NET_MS) break;
-                    sleep(5_000);
-                }
-            }
-        }
-        prefs(this).edit().putString("calendar_error", calendarError == null ? "" : calendarError)
-                .putLong("calendar_at", calendarError == null || calendarError.isEmpty()
-                        ? System.currentTimeMillis() : prefs(this).getLong("calendar_at", 0))
-                .apply();
-
         YandexAccount ya = RouteApp.yandex(this);
         if (ya.loggedIn() && System.currentTimeMillis() - ya.syncedMs() > YANDEX_SYNC_MS) {
             try {
@@ -318,6 +298,18 @@ public final class RouteService extends Service {
                 DebugLog.w(TAG, "Yandex: " + e.getMessage());
                 if (!(e instanceof YandexAccount.LoginExpired)) ya.setError(e.getMessage());
             }
+        }
+
+        // The calendars, straight from their servers; the network may still be coming up.
+        List<CalEvent> events = Collections.emptyList();
+        while (true) {
+            CalendarSync.Result r = CalendarSync.events(this, System.currentTimeMillis(), ya.places());
+            events = r.events;
+            if (r.networkFailures == 0 || now
+                    || System.currentTimeMillis() - armedAt > WAIT_FIX_MS + WAIT_NET_MS) {
+                break;
+            }
+            sleep(5_000);
         }
 
         if (!now && NaviListener.guiding()) {

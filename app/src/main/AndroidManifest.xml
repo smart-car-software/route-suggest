@@ -53,6 +53,11 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".CalendarActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
         <service
             android:name=".RouteService"
             android:exported="false" />

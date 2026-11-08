@@ -26,25 +26,8 @@ import org.junit.Test;
 
 import java.util.List;
 
-/** calendar-bot's answer, Nominatim's, cookies, the saved rows. */
+/** Nominatim's answer, cookies, the saved rows. */
 public class ParsingTest {
-    @Test
-    public void calendarEvents() throws Exception {
-        String json = "{\"ok\":true,\"events\":["
-                + "{\"title\":\"Ужин\",\"start\":\"2026-11-10T18:00+03:00\",\"end\":\"2026-11-10T20:00+03:00\","
-                + "\"ongoing\":false,\"location\":\"Ленина 5\",\"place\":\"Ильяс\",\"lat\":55.79,\"lon\":49.12},"
-                + "{\"title\":\"Врач\",\"start\":\"2026-11-10T18:30+03:00\",\"end\":\"2026-11-10T19:00+03:00\","
-                + "\"location\":\"Чистопольская 20\",\"place\":\"\",\"lat\":null,\"lon\":null},"
-                + "{\"title\":\"Сломано\",\"start\":\"когда-то\",\"end\":\"\"}]}";
-        List<CalEvent> e = CalEvent.parse(json);
-        assertEquals(2, e.size());
-        assertEquals(SuggesterTest.at(11, 10, 18, 0), e.get(0).startMs);
-        assertTrue(e.get(0).hasGeo());
-        assertEquals("Ильяс", e.get(0).place);
-        assertFalse(e.get(1).hasGeo());
-        assertTrue(CalEvent.parse("{\"ok\":true}").isEmpty());
-    }
-
     @Test
     public void nominatimShortAddress() {
         assertEquals("улица Баумана 1", Geocode.shortAddress("{\"name\":\"\",\"address\":"

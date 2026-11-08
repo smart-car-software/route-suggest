@@ -17,11 +17,6 @@
 
 apply plugin: 'com.android.application'
 
-// calendar-bot's car endpoint, baked in at release (repository secrets): nothing to set up in
-// the car. Empty in a CI debug build — the calendar is then simply off.
-def carApiUrl = System.getenv('CAR_API_URL') ?: ''
-def carApiToken = System.getenv('CAR_API_TOKEN') ?: ''
-
 android {
     namespace "com.smartcar.route"
 
@@ -35,9 +30,6 @@ android {
         targetSdkVersion 30
         versionCode rootProject.ext.appVersionCode
         versionName rootProject.ext.appVersionName
-
-        buildConfigField "String", "CAR_API_URL", "\"${carApiUrl}\""
-        buildConfigField "String", "CAR_API_TOKEN", "\"${carApiToken}\""
 
         setProperty("archivesBaseName", "route-suggest-${versionName}")
     }

@@ -75,9 +75,6 @@ jobs:
         env:
           VERSION_NAME: ${{ steps.version.outputs.version }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-          # calendar-bot's GET /v1/car/events (the repository is private, so is the release)
-          CAR_API_URL: ${{ secrets.CAR_API_URL }}
-          CAR_API_TOKEN: ${{ secrets.CAR_API_TOKEN }}
         run: |
           ./gradlew assembleRelease
           mv app/build/outputs/apk/release/route-suggest-${VERSION_NAME}-release.apk \

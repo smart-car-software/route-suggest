@@ -24,7 +24,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
-import android.graphics.Color;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -38,11 +37,6 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
-
-import com.google.zxing.BarcodeFormat;
-import com.google.zxing.WriterException;
-import com.google.zxing.common.BitMatrix;
-import com.google.zxing.qrcode.QRCodeWriter;
 
 import java.io.IOException;
 import java.util.List;
@@ -65,6 +59,7 @@ public final class MainActivity extends Activity {
     private LinearLayout suggestions;
     private LinearLayout yandexBox;
     private Button grantLocation;
+    private LinearLayout calendarBox;
     private volatile YandexAccount.Login login;
 
     static void showSuggestions(Context c) {
@@ -107,6 +102,14 @@ public final class MainActivity extends Activity {
         yandexBox = new LinearLayout(this);
         yandexBox.setOrientation(LinearLayout.VERTICAL);
         root.addView(yandexBox);
+        TextView calTitle = text(getString(R.string.cal_section), 20, true);
+        calTitle.setPadding(0, dp(16), 0, 0);
+        root.addView(calTitle);
+        calendarBox = new LinearLayout(this);
+        calendarBox.setOrientation(LinearLayout.VERTICAL);
+        root.addView(calendarBox);
+        root.addView(button(getString(R.string.cal_add), v ->
+                startActivity(new Intent(this, CalendarActivity.class))));
         grantLocation = button(getString(R.string.grant_location), v -> requestPermissions(
                 new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 1));
         root.addView(grantLocation, 2);
@@ -184,8 +187,10 @@ public final class MainActivity extends Activity {
         worker.execute(() -> {
             int trips = TripStore.get(this).count();
             String s = statusText(trips);
+            List<CalAccount> accounts = CalStore.load(this);
             main.post(() -> {
                 status.setText(s);
+                drawCalendars(accounts);
                 grantLocation.setVisibility(checkSelfPermission(
                         Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
                         ? View.GONE : View.VISIBLE);
@@ -221,16 +226,31 @@ public final class MainActivity extends Activity {
             line(sb, false, "", ya.error().isEmpty() ? getString(R.string.st_yandex_missing)
                     : ya.error());
         }
-        if (!CalendarClient.configured()) {
-            line(sb, false, "", getString(R.string.st_calendar_off));
-        } else {
-            String err = RouteService.prefs(this).getString("calendar_error", "");
-            line(sb, err.isEmpty(), getString(R.string.st_calendar_ok),
-                    getString(R.string.st_calendar_err, err));
-        }
         line(sb, NaviListener.granted(this), getString(R.string.st_listener_ok),
                 getString(R.string.st_listener_missing));
         return sb.toString().trim();
+    }
+
+    /** Each connected account: its state, and a tap to remove it. */
+    private void drawCalendars(List<CalAccount> accounts) {
+        calendarBox.removeAllViews();
+        if (accounts.isEmpty()) {
+            calendarBox.addView(hint(getString(R.string.cal_none)));
+            return;
+        }
+        for (CalAccount a : accounts) {
+            String state = !a.error.isEmpty() ? "• " + a.error
+                    : "✓ " + getResources().getQuantityString(R.plurals.cal_count, a.enabled(), a.enabled());
+            Button b = button(a.title() + "\n" + state, v -> new AlertDialog.Builder(this)
+                    .setMessage(getString(R.string.cal_remove_q, a.title()))
+                    .setPositiveButton(R.string.cal_remove, (d, w) -> {
+                        CalStore.remove(this, a.id);
+                        refresh();
+                    })
+                    .setNegativeButton(R.string.cancel, null).show());
+            b.setTextSize(16);
+            calendarBox.addView(b);
+        }
     }
 
     private static void line(StringBuilder sb, boolean ok, String good, String bad) {
@@ -247,7 +267,7 @@ public final class MainActivity extends Activity {
             yandexBox.addView(text(getString(R.string.login_title), 20, true));
             yandexBox.addView(hint(getString(R.string.login_hint)));
             ImageView qr = new ImageView(this);
-            Bitmap bmp = qr(l.link, dp(280));
+            Bitmap bmp = Qr.of(l.link, dp(280));
             if (bmp != null) qr.setImageBitmap(bmp);
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(280), dp(280));
             lp.gravity = Gravity.CENTER_HORIZONTAL;
@@ -325,19 +345,6 @@ public final class MainActivity extends Activity {
                 }
             });
         });
-    }
-
-    private static Bitmap qr(String text, int size) {
-        try {
-            BitMatrix m = new QRCodeWriter().encode(text, BarcodeFormat.QR_CODE, size, size);
-            Bitmap b = Bitmap.createBitmap(size, size, Bitmap.Config.RGB_565);
-            for (int x = 0; x < size; x++) {
-                for (int y = 0; y < size; y++) b.setPixel(x, y, m.get(x, y) ? Color.BLACK : Color.WHITE);
-            }
-            return b;
-        } catch (WriterException | IllegalArgumentException e) {
-            return null;
-        }
     }
 
     // ------------------------------------------------------------------ views

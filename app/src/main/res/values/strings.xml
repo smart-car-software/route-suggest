@@ -47,9 +47,34 @@
     <string name="st_location_missing">Нет доступа к геопозиции — поездки не записываются</string>
     <string name="st_yandex_ok">Яндекс: закладок %1$d, Дом %2$s, Работа %3$s (обновлено %4$s)</string>
     <string name="st_yandex_missing">Яндекс не подключён — Дом и Работа узнаются по поездкам</string>
-    <string name="st_calendar_ok">Календарь подключён</string>
-    <string name="st_calendar_err">Календарь: %1$s</string>
-    <string name="st_calendar_off">Календарь не настроен в этой сборке</string>
+    <string name="cal_section">Календари</string>
+    <string name="cal_none">Не подключены. Тогда события в ближайший час не предлагаются.</string>
+    <string name="cal_add">Добавить календарь</string>
+    <string name="cal_add_title">Какой календарь подключить?</string>
+    <string name="cal_add_hint">Вход по логину и паролю. Пароль хранится только в машине, зашифрованным. Из календаря берутся события, которые идут сейчас или начнутся в течение часа, и их место.</string>
+    <string name="cal_google">Google Календарь по паролю подключить нельзя: Google пускает только через свой вход (OAuth). Можно добавить его в iCloud или Яндекс Календарь на телефоне и подключить тот.</string>
+    <string name="cal_server">Адрес сервера CalDAV (https://…)</string>
+    <string name="cal_server_optional">Адрес почты на работе — если не найдётся сам (необязательно)</string>
+    <string name="cal_password">Пароль</string>
+    <string name="cal_app_password">Пароль приложения</string>
+    <string name="cal_connect">Подключить</string>
+    <string name="cal_connecting">Вхожу и ищу календари…</string>
+    <string name="cal_fill_in">Заполните все поля</string>
+    <string name="cal_wrong_password">Неверный логин или пароль</string>
+    <string name="cal_wrong_app_password">Неверный логин или пароль. Нужен пароль приложения, а не обычный пароль — см. подсказку выше.</string>
+    <string name="cal_failed">Не получилось: %1$s</string>
+    <string name="cal_choose">Какие календари смотреть?</string>
+    <string name="cal_none_chosen">Отметьте хотя бы один календарь</string>
+    <string name="cal_save">Сохранить</string>
+    <string name="cal_remove_q">Отключить %1$s?</string>
+    <string name="cal_remove">Отключить</string>
+    <string name="back">Назад</string>
+    <plurals name="cal_count">
+        <item quantity="one">%d календарь</item>
+        <item quantity="few">%d календаря</item>
+        <item quantity="many">%d календарей</item>
+        <item quantity="other">%d календаря</item>
+    </plurals>
     <string name="st_listener_ok">Видно, когда Навигатор ведёт по маршруту</string>
     <string name="st_listener_missing">Нет доступа к уведомлениям Навигатора (необязательно)</string>
 

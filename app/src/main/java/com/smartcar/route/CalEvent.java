@@ -17,17 +17,9 @@
 
 package com.smartcar.route;
 
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
-
-import java.time.OffsetDateTime;
-import java.util.ArrayList;
-import java.util.List;
-
 /**
- * A calendar event as calendar-bot's {@code GET /v1/car/events} gives it: going on now or
- * starting within the hour, with coordinates or at least an address.
+ * A calendar event worth a route ({@link EventFilter}): going on now or starting within the
+ * hour, with coordinates or at least an address to search for.
  */
 final class CalEvent {
     final String title;
@@ -51,29 +43,5 @@ final class CalEvent {
 
     boolean hasGeo() {
         return Geo.valid(lat, lon);
-    }
-
-    /** The bot's JSON → events; a malformed item is skipped, not the whole answer. */
-    static List<CalEvent> parse(String json) throws JSONException {
-        JSONArray arr = new JSONObject(json).optJSONArray("events");
-        List<CalEvent> out = new ArrayList<>();
-        if (arr == null) return out;
-        for (int i = 0; i < arr.length(); i++) {
-            JSONObject o = arr.optJSONObject(i);
-            if (o == null) continue;
-            try {
-                String title = o.optString("title", "").trim();
-                if (title.isEmpty()) continue;
-                out.add(new CalEvent(title,
-                        OffsetDateTime.parse(o.getString("start")).toInstant().toEpochMilli(),
-                        OffsetDateTime.parse(o.getString("end")).toInstant().toEpochMilli(),
-                        o.optString("location", ""), o.optString("place", ""),
-                        o.isNull("lat") ? Double.NaN : o.optDouble("lat", Double.NaN),
-                        o.isNull("lon") ? Double.NaN : o.optDouble("lon", Double.NaN)));
-            } catch (RuntimeException | JSONException e) {
-                // a date the parser does not take: leave that one out
-            }
-        }
-        return out;
     }
 }
