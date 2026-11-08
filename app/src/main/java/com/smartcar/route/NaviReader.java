@@ -92,7 +92,7 @@ final class NaviReader {
                 }
             }
         } catch (RuntimeException e) {
-            throw new IOException("не разобрал базу Навигатора: " + e.getMessage());
+            throw new IOException("не разобрал базу Навигатора: " + Errors.text(e));
         } finally {
             if (sql != null) sql.close();
             //noinspection ResultOfMethodCallIgnored

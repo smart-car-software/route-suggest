@@ -297,8 +297,8 @@ public final class RouteService extends Service {
             try {
                 ya.sync();
             } catch (IOException e) {
-                DebugLog.w(TAG, "Yandex: " + e.getMessage());
-                if (!(e instanceof YandexAccount.LoginExpired)) ya.setError(e.getMessage());
+                DebugLog.w(TAG, "Yandex: " + Errors.text(e));
+                if (!(e instanceof YandexAccount.LoginExpired)) ya.setError(Errors.text(e));
             }
         }
 
@@ -333,8 +333,8 @@ public final class RouteService extends Service {
         try {
             NaviReader.read(this);
         } catch (IOException e) {
-            DebugLog.w(TAG, "Navigator history: " + e.getMessage());
-            NaviReader.prefs(this).edit().putString("error", e.getMessage()).apply();
+            DebugLog.w(TAG, "Navigator history: " + Errors.text(e));
+            NaviReader.prefs(this).edit().putString("error", Errors.text(e)).apply();
         }
     }
 

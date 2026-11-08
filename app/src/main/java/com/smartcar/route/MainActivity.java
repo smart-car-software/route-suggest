@@ -261,7 +261,7 @@ public final class MainActivity extends Activity {
                 NaviReader.read(this);
                 NaviReader.prefs(this).edit().putBoolean("enabled", true).apply();
             } catch (IOException e) {
-                err = e.getMessage();
+                err = Errors.text(e);
             }
             final String error = err;
             main.post(() -> {
@@ -330,7 +330,7 @@ public final class MainActivity extends Activity {
                 try {
                     ya.sync();
                 } catch (IOException e) {
-                    if (!(e instanceof YandexAccount.LoginExpired)) ya.setError(e.getMessage());
+                    if (!(e instanceof YandexAccount.LoginExpired)) ya.setError(Errors.text(e));
                 }
                 main.post(this::refresh);
             })));
@@ -351,7 +351,7 @@ public final class MainActivity extends Activity {
             } catch (IOException e) {
                 main.post(() -> {
                     login = null;
-                    status.setText(getString(R.string.login_failed, e.getMessage()));
+                    status.setText(getString(R.string.login_failed, Errors.text(e)));
                 });
                 return;
             }
@@ -366,7 +366,7 @@ public final class MainActivity extends Activity {
                         try {
                             ya.sync();
                         } catch (IOException e) {
-                            ya.setError(e.getMessage());
+                            ya.setError(Errors.text(e));
                         }
                         main.post(() -> {
                             login = null;

@@ -143,7 +143,7 @@ public final class CalendarActivity extends Activity {
                 } catch (IOException | RuntimeException e) {
                     main.post(() -> {
                         connect.setEnabled(true);
-                        status.setText(getString(R.string.cal_failed, e.getMessage()));
+                        status.setText(getString(R.string.cal_failed, Errors.text(e)));
                     });
                 }
             });

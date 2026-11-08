@@ -97,7 +97,7 @@ final class CalendarSync {
             } catch (CalDav.AuthException e) {
                 a.error = "Неверный логин или пароль — подключите заново";
             } catch (IOException e) {
-                a.error = e.getMessage() == null ? "нет связи" : e.getMessage();
+                a.error = Errors.text(e);
                 network++;
             } catch (RuntimeException e) {
                 a.error = "не разобрал ответ сервера";

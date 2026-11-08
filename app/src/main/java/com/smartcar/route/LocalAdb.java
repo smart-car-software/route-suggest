@@ -95,16 +95,21 @@ final class LocalAdb implements Closeable {
         this.out = socket.getOutputStream();
     }
 
-    /** Connects and authenticates on the first port that answers. */
+    /**
+     * Connects and authenticates on the first port that speaks the adb transport. A port that
+     * accepts but is something else (an emulator's adbd has the adb-server protocol on 5037 and
+     * closes on CNXN) is passed over, not the end. route-suggest change: the original stopped at
+     * the first failed handshake.
+     */
     static LocalAdb connect(Context context, StringBuilder report) throws IOException {
         KeyPair keys = keyPair(context);
-        IOException last = null;
+        StringBuilder why = new StringBuilder();
         for (int port : PORTS) {
             Socket s = new Socket();
             try {
                 s.connect(new InetSocketAddress("127.0.0.1", port), 1500);
             } catch (IOException e) {
-                last = e;
+                why.append(why.length() > 0 ? ", " : "").append(port).append(": ").append(Errors.text(e));
                 closeQuietly(s);
                 continue;
             }
@@ -115,11 +120,10 @@ final class LocalAdb implements Closeable {
                 return adb;
             } catch (IOException e) {
                 adb.close();
-                throw e;
+                why.append(why.length() > 0 ? ", " : "").append(port).append(": ").append(Errors.text(e));
             }
         }
-        throw new IOException("no adb daemon on 127.0.0.1 ports 5555/5556/5557/5037"
-                + (last != null ? " (" + last.getMessage() + ")" : ""));
+        throw new IOException("нет ADB по сети на 127.0.0.1 (" + why + ")");
     }
 
     private void handshake(KeyPair keys, StringBuilder report) throws IOException {
