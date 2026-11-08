@@ -48,6 +48,58 @@ final class Geocode {
         }
     }
 
+    static final String SEARCH = "https://nominatim.openstreetmap.org/search";
+    /** A found address farther than this from the car is a namesake in another city. */
+    static final double MAX_FORWARD_M = 100_000;
+
+    /**
+     * Coordinates for an event's address («Казань, Кремль»), the result nearest the car, so the
+     * Navigator gets a route at once (a search would need the touchscreen). Blocking; null when
+     * nothing near is found.
+     */
+    static double[] forward(String query, double nearLat, double nearLon) {
+        StringBuilder url = new StringBuilder(SEARCH).append("?format=jsonv2&limit=5&accept-language=ru&q=");
+        try {
+            url.append(java.net.URLEncoder.encode(query, "UTF-8")); // the Charset overload is API 33+
+        } catch (java.io.UnsupportedEncodingException e) {
+            return null;
+        }
+        if (Geo.valid(nearLat, nearLon)) {
+            url.append(String.format(Locale.ROOT, "&viewbox=%.4f,%.4f,%.4f,%.4f", nearLon - 1, nearLat + 1,
+                    nearLon + 1, nearLat - 1));
+        }
+        try {
+            Http.Response r = Http.call("GET", url.toString(), Http.headers("User-Agent",
+                    "route-suggest/" + BuildConfig.VERSION_NAME + " (smart-car-software)"), null, null, null);
+            return r.ok() ? nearest(r.body, nearLat, nearLon) : null;
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
+    /** The result nearest (lat, lon) within {@link #MAX_FORWARD_M}; without a fix — the first. Pure. */
+    static double[] nearest(String json, double lat, double lon) {
+        try {
+            org.json.JSONArray a = new org.json.JSONArray(json);
+            double[] best = null;
+            double bestM = MAX_FORWARD_M;
+            for (int i = 0; i < a.length(); i++) {
+                JSONObject o = a.getJSONObject(i);
+                double la = Double.parseDouble(o.getString("lat")), lo = Double.parseDouble(o.getString("lon"));
+                if (!Geo.valid(la, lo)) continue;
+                if (!Geo.valid(lat, lon)) return new double[]{la, lo};
+                double m = Geo.meters(lat, lon, la, lo);
+                if (m <= bestM) {
+                    best = new double[]{la, lo};
+                    bestM = m;
+                }
+            }
+            return best;
+        } catch (JSONException | NumberFormatException e) {
+            return null;
+        }
+    }
+
     /** «Улица 5», else the object's name, else the suburb/town. Pure. */
     static String shortAddress(String json) {
         try {

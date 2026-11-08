@@ -316,6 +316,7 @@ public final class RouteService extends Service {
             }
             sleep(5_000);
         }
+        events = withCoordinates(events);
 
         if (!now && NaviListener.guiding()) {
             DebugLog.i(TAG, "the Navigator already leads a route: no question");
@@ -325,6 +326,38 @@ public final class RouteService extends Service {
         prefs(this).edit().putLong("prompt_at", System.currentTimeMillis())
                 .putInt("prompt_boot", bootCount()).apply();
         main.post(() -> show(list, now));
+    }
+
+    /**
+     * Events with only an address get coordinates (OSM Nominatim, nearest the car, cached by the
+     * address): the Navigator then builds the route at once, where a search would need the
+     * touchscreen. Not found — the event stays a search.
+     */
+    private List<CalEvent> withCoordinates(List<CalEvent> events) {
+        List<CalEvent> out = new ArrayList<>();
+        SharedPreferences cache = getSharedPreferences("geocode", MODE_PRIVATE);
+        Location here = lastFix;
+        for (CalEvent e : events) {
+            if (e.hasGeo() || e.location.isEmpty()) {
+                out.add(e);
+                continue;
+            }
+            String key = EventFilter.norm(e.location);
+            String hit = cache.getString(key, null);
+            double[] geo = null;
+            if (hit != null && hit.contains(",")) {
+                String[] p = hit.split(",");
+                geo = new double[]{Double.parseDouble(p[0]), Double.parseDouble(p[1])};
+            } else {
+                geo = Geocode.forward(e.location, here == null ? Double.NaN : here.getLatitude(),
+                        here == null ? Double.NaN : here.getLongitude());
+                // A miss is not kept: it may be the network, not the address.
+                if (geo != null) cache.edit().putString(key, geo[0] + "," + geo[1]).apply();
+            }
+            out.add(geo == null ? e : new CalEvent(e.title, e.startMs, e.endMs, e.location, e.place,
+                    geo[0], geo[1]));
+        }
+        return out;
     }
 
     /** The Navigator's own routes, when the user turned that on; a failure is only shown. */

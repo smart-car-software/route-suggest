@@ -38,6 +38,18 @@ public class ParsingTest {
     }
 
     @Test
+    public void forwardGeocodeTakesTheNearest() {
+        String json = "[{\"lat\":\"55.75\",\"lon\":\"37.61\",\"display_name\":\"Кремль, Москва\"},"
+                + "{\"lat\":\"55.7987\",\"lon\":\"49.1056\",\"display_name\":\"Кремль, Казань\"}]";
+        double[] g = Geocode.nearest(json, 55.79, 49.12); // the car is in Kazan
+        assertEquals(55.7987, g[0], 1e-9);
+        assertEquals(55.75, Geocode.nearest(json, Double.NaN, Double.NaN)[0], 1e-9); // no fix: the first
+        assertNull(Geocode.nearest("[{\"lat\":\"55.75\",\"lon\":\"37.61\"}]", 55.79, 49.12)); // only far away
+        assertNull(Geocode.nearest("[]", 55.79, 49.12));
+        assertNull(Geocode.nearest("{\"error\":1}", 55.79, 49.12));
+    }
+
+    @Test
     public void cookies() {
         CookieJar jar = new CookieJar();
         long now = 1_000_000L;
