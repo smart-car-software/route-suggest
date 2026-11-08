@@ -96,12 +96,17 @@ public class NaviHistoryTest {
     }
 
     static byte[] delta(String id, long ms, double lat, double lon, String title) {
+        return delta(id, ms, lat, lon, title, false);
+    }
+
+    static byte[] delta(String id, long ms, double lat, double lon, String title, boolean org) {
         Archive a = new Archive();
         a.op = title == null ? 1 : 2;
         a.head().record(id).text("description", "City of Kazan");
         a.field("indoor_level", 0x00);
         a.time("last_used", ms).dbl("latitude", lat).dbl("longitude", lon);
         if (title != null) a.text("title", title);
+        if (org) a.text("uri", "ymapsbm1://org?oid=95813866834");
         return a.text("point_context", "").bytes();
     }
 
@@ -123,12 +128,17 @@ public class NaviHistoryTest {
     @Test
     public void buildingAndGoAreOneRouteTheSnapshotGivesNoTimes() {
         String a = "_JQPJWWB1RkSkZkyOsMeKGQc-Y5UMjoQ", org = "_12KKIc.ZRLGaImLrgK7XaAKDswMX7OQ";
+        long day = 86_400_000L, hour = 3_600_000L;
         List<byte[]> deltas = Arrays.asList(
                 delta(a, T - 8_000L, 55.7512, 49.2101, null),     // building: two deltas
                 delta(a, T - 8_000L, 55.7512, 49.2101, null),
                 delta(a, T, 55.7512, 49.2101, null),              // «Go»
-                delta(a, T + 86_400_000L, 55.7512, 49.2101, null), // the next day, again
-                delta(org, T + 3_600_000L, 55.7988, 49.1063, "Kazan Kremlin"));
+                delta(a, T + day - 20_000L, 55.7512, 49.2101, null), // the next day, again
+                delta(a, T + day, 55.7512, 49.2101, null),
+                delta(a, T + 2 * day, 55.7512, 49.2101, null),    // only looked at: no «Go»
+                delta(a, T + 2 * day + 400, 55.7512, 49.2101, null),
+                delta(org, T + hour - 10_000L, 55.7988, 49.1063, "Kazan Kremlin", true),
+                delta(org, T + hour, 55.7988, 49.1063, "Kazan Kremlin", true));
         // A snapshot from the account: the phone's route to somewhere else gives no drive, only
         // a name for a place the deltas know.
         byte[] snapshot = new Archive().head()
@@ -140,12 +150,16 @@ public class NaviHistoryTest {
         assertEquals(T, r.get(0).ms);
         assertEquals("Pobedy Avenue", r.get(0).title); // named from the snapshot
         assertEquals("Kazan Kremlin", r.get(1).title);
-        assertEquals(T + 86_400_000L, r.get(2).ms);
+        assertEquals(T + day, r.get(2).ms);
         for (NaviHistory.Route x : r) assertTrue(!x.title.equals("С телефона"));
         Trip t = r.get(1).trip();
-        assertEquals(T + 3_600_000L, t.startMs);
+        assertEquals(T + hour, t.startMs);
         assertEquals(49.1063, t.endLon, 1e-12);
-        assertEquals("Kazan Kremlin", t.name);
+        assertEquals(null, t.name);             // not a name the driver chose
+        assertEquals("Kazan Kremlin", t.naviName); // an organisation: a name below bookmarks
+        Trip street = r.get(0).trip();
+        assertEquals(null, street.naviName);    // a point's title is the Navigator's geocoded street
+        assertEquals("Pobedy Avenue", street.address);
     }
 
     // Real values from the emulator (Monjaro mod 30.3.0, test points): delta:15 — the record
@@ -178,19 +192,22 @@ public class NaviHistoryTest {
         assertEquals(55.797557, k.lat, 1e-12);
         assertEquals(49.107295, k.lon, 1e-12);
 
+        assertTrue(k.org);
+        assertTrue(!a.org);
+
         List<NaviHistory.Route> r = NaviHistory.routes(Arrays.asList(hex(D15), hex(D17), hex(D20)),
                 Collections.emptyList());
-        assertEquals(2, r.size()); // building + «Go» are one route
+        // building + «Go» are one route; delta:20 alone (its building not given) is no «Go»
+        assertEquals(1, r.size());
         assertEquals(1794161248629L, r.get(0).ms);
         assertEquals("Pobedy Avenue", r.get(0).title);
-        assertEquals("Kazan Kremlin", r.get(1).title);
     }
 
     @Test
     public void keptAcrossSyncs() throws Exception {
-        NaviHistory.Route old = new NaviHistory.Route("x", T, 55.7, 49.2, "A", "");
-        NaviHistory.Route again = new NaviHistory.Route("x", T + 60_000L, 55.7, 49.2, "A", ""); // «Go» seen later
-        NaviHistory.Route next = new NaviHistory.Route("y", T + 86_400_000L, 55.8, 49.1, "B", "");
+        NaviHistory.Route old = new NaviHistory.Route("x", T, 55.7, 49.2, "A", "", false);
+        NaviHistory.Route again = new NaviHistory.Route("x", T + 60_000L, 55.7, 49.2, "A", "", false); // «Go» seen later
+        NaviHistory.Route next = new NaviHistory.Route("y", T + 86_400_000L, 55.8, 49.1, "B", "", true);
         List<NaviHistory.Route> k = NaviHistory.accumulate(Collections.singletonList(old), Arrays.asList(again, next), 1000);
         assertEquals(2, k.size());
         List<NaviHistory.Route> capped = NaviHistory.accumulate(k, Collections.emptyList(), 1);
@@ -198,17 +215,20 @@ public class NaviHistoryTest {
         List<NaviHistory.Route> back = NaviHistory.fromJson(NaviHistory.toJson(k));
         assertEquals(2, back.size());
         assertEquals("B", back.get(1).title);
+        assertTrue(back.get(1).org);
     }
 
     @Test
     public void routesAndRecordedDrivesCountOnce() {
         long t = SuggesterTest.at(11, 3, 18, 5);
         Trip recorded = new Trip(t + 5 * 60_000L, 55.8, 49.1, t + 25 * 60_000L, 55.7802, 49.1501);
-        Trip same = new Trip(0, t, 55.78, 49.15, t, 55.78, 49.15, "Ice Power", "", true);
-        Trip other = new Trip(0, t - 86_400_000L, 55.78, 49.15, t - 86_400_000L, 55.78, 49.15, "Ice Power", "", true);
+        Trip same = new Trip(0, t, 55.78, 49.15, t, 55.78, 49.15, null, "Баумана 1", true).withNaviName("Ice Power");
+        Trip other = new Trip(0, t - 86_400_000L, 55.78, 49.15, t - 86_400_000L, 55.78, 49.15, null, "", true);
         List<Trip> m = NaviHistory.merge(Collections.singletonList(recorded), Arrays.asList(same, other));
         assertEquals(2, m.size());
-        assertEquals("Ice Power", m.get(0).name); // the recorded drive is named after the route
+        assertEquals("Ice Power", m.get(0).naviName); // the recorded drive takes the route's names
+        assertEquals("Баумана 1", m.get(0).address);
+        assertEquals(null, m.get(0).name);
         assertEquals(t + 5 * 60_000L, m.get(0).startMs);
         assertEquals(new ArrayList<>(), NaviHistory.merge(new ArrayList<>(), new ArrayList<>()));
     }

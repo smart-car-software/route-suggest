@@ -122,12 +122,14 @@ final class Suggester {
             String when = e.startMs <= in.nowMs ? "идёт"
                     : String.format(Locale.ROOT, "%1$tH:%1$tM",
                     Instant.ofEpochMilli(e.startMs).atZone(in.zone));
-            String name = !e.place.isEmpty() ? e.place : e.title;
+            // Only a known place's name is remembered for the drive: «Ужин» is not a place.
+            String name = e.place;
             if (e.hasGeo()) {
-                rows.add(Suggestion.Kind.EVENT, e.title + " · " + when, name, e.lat, e.lon, "");
+                rows.add(Suggestion.Kind.EVENT, clip(e.title, LABEL_WITH_SUFFIX) + " · " + when, name,
+                        e.lat, e.lon, "");
             } else if (!e.location.isEmpty()) {
-                rows.add(Suggestion.Kind.EVENT, e.title + " · " + when, name, Double.NaN,
-                        Double.NaN, e.location);
+                rows.add(Suggestion.Kind.EVENT, clip(e.title, LABEL_WITH_SUFFIX) + " · " + when, name,
+                        Double.NaN, Double.NaN, e.location);
             }
         }
 
@@ -138,11 +140,12 @@ final class Suggester {
         }
         routines.sort((a, b) -> Integer.compare(b.score, a.score));
         for (Routine r : routines) {
-            String name = r.cluster.name != null ? r.cluster.name : unnamed(r.cluster, in);
+            String label = r.cluster.name != null ? r.cluster.name : unnamed(r.cluster, in);
             String when = r.weekly ? "по " + BY_DAY[now.getDayOfWeek().getValue() - 1]
                     : "обычно в это время";
-            rows.add(Suggestion.Kind.ROUTINE, name + " · " + when, name, r.cluster.lat,
-                    r.cluster.lon, "");
+            // «Место в 2,5 км» is a label, not a name to remember for the place.
+            rows.add(Suggestion.Kind.ROUTINE, clip(label, LABEL_WITH_SUFFIX) + " · " + when,
+                    r.cluster.name == null ? "" : r.cluster.name, r.cluster.lat, r.cluster.lon, "");
         }
 
         if (located && home != null && home.metersTo(in.hereLat, in.hereLon) <= AT_M) {
@@ -159,8 +162,11 @@ final class Suggester {
         int added = 0;
         for (Cluster c : frequent) {
             if (added >= FREQUENT_ROWS) break;
-            String name = c.name != null ? c.name : unnamed(c, in);
-            if (rows.add(Suggestion.Kind.FREQUENT, name, name, c.lat, c.lon, "")) added++;
+            String label = c.name != null ? c.name : unnamed(c, in);
+            if (rows.add(Suggestion.Kind.FREQUENT, clip(label, LABEL), c.name == null ? "" : c.name,
+                    c.lat, c.lon, "")) {
+                added++;
+            }
         }
         return rows.out;
     }
@@ -239,6 +245,15 @@ final class Suggester {
         return null;
     }
 
+    /** What fits a row on the cluster (460 px): alone, and before «· по воскресеньям». */
+    static final int LABEL = 30;
+    static final int LABEL_WITH_SUFFIX = 18;
+
+    static String clip(String s, int max) {
+        String t = s == null ? "" : s.trim();
+        return t.length() <= max ? t : t.substring(0, max - 1).trim() + "…";
+    }
+
     private static boolean isWeekend(DayOfWeek d) {
         return d == DayOfWeek.SATURDAY || d == DayOfWeek.SUNDAY;
     }
@@ -273,10 +288,13 @@ final class Suggester {
     }
 
     /**
-     * A place's name: the nearest Yandex place within {@link #NAME_M} («Дом», «Работа», a
-     * bookmark), else the name chosen most often for drives there, else the most common address.
+     * A place's name, by who knows it best: the row the driver chose for drives there, then the
+     * nearest Yandex place within {@link #NAME_M} («Дом», «Работа», a bookmark), then an
+     * organisation the Navigator led there, then the most common address.
      */
     static String name(Cluster c, List<Place> places) {
+        String chosen = mostCommon(c, 0);
+        if (chosen != null) return chosen;
         Place best = null;
         double bestM = NAME_M;
         for (Place p : places) {
@@ -287,16 +305,17 @@ final class Suggester {
             }
         }
         if (best != null) return best.name;
-        String n = mostCommon(c, true);
-        return n != null ? n : mostCommon(c, false);
+        String org = mostCommon(c, 1);
+        return org != null ? org : mostCommon(c, 2);
     }
 
-    private static String mostCommon(Cluster c, boolean names) {
+    /** what: 0 — the chosen name, 1 — the Navigator's organisation, 2 — the address. */
+    private static String mostCommon(Cluster c, int what) {
         Map<String, Integer> count = new HashMap<>();
         String best = null;
         int bestN = 0;
         for (Trip t : c.trips) {
-            String v = names ? t.name : t.address;
+            String v = what == 0 ? t.name : what == 1 ? t.naviName : t.address;
             if (v == null || v.trim().isEmpty()) continue;
             int n = count.merge(v.trim(), 1, Integer::sum);
             if (n > bestN) {

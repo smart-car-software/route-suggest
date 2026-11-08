@@ -48,6 +48,8 @@ final class NaviHistory {
             + ".ext.maps_common@ymapspointshistory1/db.sqlite";
     /** Building and «Поехали» within this are one route. */
     static final long SAME_ROUTE_MS = 3 * 60_000L;
+    /** «Поехали» comes this long after building, at least (seen: 6–40 s). */
+    static final long GO_AFTER_MS = 2_000L;
 
     private static final byte[] COLLECTION = withLength("pointshistory");
 
@@ -58,6 +60,8 @@ final class NaviHistory {
         double lon = Double.NaN;
         String title = "";
         String description = "";
+        /** Has a uri: an organisation, so its title is a name, not a geocoded street. */
+        boolean org;
 
         Point(String id) {
             this.id = id;
@@ -72,23 +76,29 @@ final class NaviHistory {
         final double lon;
         final String title;
         final String description;
+        final boolean org;
 
-        Route(String id, long ms, double lat, double lon, String title, String description) {
+        Route(String id, long ms, double lat, double lon, String title, String description, boolean org) {
             this.id = id;
             this.ms = ms;
             this.lat = lat;
             this.lon = lon;
             this.title = title;
             this.description = description;
+            this.org = org;
         }
 
         String key() {
             return id + "|" + ms;
         }
 
+        /**
+         * As a drive. An organisation's title is a name ({@link Trip#naviName}); a point's title
+         * is only the Navigator's geocoded street, so it is the drive's address.
+         */
         Trip trip() {
-            return new Trip(0, ms, lat, lon, ms, lat, lon, title.isEmpty() ? null : title,
-                    description, true);
+            Trip t = new Trip(0, ms, lat, lon, ms, lat, lon, null, org ? description : title, true);
+            return org && !title.isEmpty() ? t.withNaviName(title) : t;
         }
     }
 
@@ -114,6 +124,8 @@ final class NaviHistory {
             Object ti = field(v, from, to, "title"), de = field(v, from, to, "description");
             if (ti instanceof String) p.title = ((String) ti).trim();
             if (de instanceof String) p.description = ((String) de).trim();
+            Object uri = field(v, from, to, "uri");
+            p.org = uri instanceof String && !((String) uri).trim().isEmpty();
             out.add(p);
         }
         return out;
@@ -140,6 +152,7 @@ final class NaviHistory {
                 }
                 if (!p.title.isEmpty()) k.title = p.title;
                 if (!p.description.isEmpty()) k.description = p.description;
+                if (p.org) k.org = true;
                 if (delta && p.lastUsed > 0) times.computeIfAbsent(p.id, x -> new ArrayList<>()).add(p.lastUsed);
             }
         }
@@ -148,14 +161,16 @@ final class NaviHistory {
             List<Long> ts = times.get(k.id);
             if (ts == null || !place(k.lat, k.lon)) continue;
             ts.sort(null);
-            long groupEnd = -1;
+            int first = 0;
             for (int i = 0; i < ts.size(); i++) {
-                long t = ts.get(i);
-                boolean last = i + 1 == ts.size() || ts.get(i + 1) - t > SAME_ROUTE_MS;
-                if (last && t != groupEnd) {
-                    out.add(new Route(k.id, t, k.lat, k.lon, k.title, k.description));
-                    groupEnd = t;
+                boolean last = i + 1 == ts.size() || ts.get(i + 1) - ts.get(i) > SAME_ROUTE_MS;
+                if (!last) continue;
+                // Building writes two deltas within a second; «Поехали» one more, seconds later.
+                // A route only looked at (no «Поехали») is not a drive.
+                if (ts.get(i) - ts.get(first) > GO_AFTER_MS) {
+                    out.add(new Route(k.id, ts.get(i), k.lat, k.lon, k.title, k.description, k.org));
                 }
+                first = i + 1;
             }
         }
         out.sort((a, b) -> Long.compare(a.ms, b.ms));
@@ -181,7 +196,7 @@ final class NaviHistory {
     /**
      * Drives recorded by GPS and routes from the Navigator, without counting one drive twice: a
      * route is dropped when a recorded drive left within 30 min of it and ended within 500 m of
-     * its destination — and then gives that drive its name, if it had none.
+     * its destination — and then lends that drive its organisation's name and its address.
      */
     static List<Trip> merge(List<Trip> recorded, List<Trip> routes) {
         List<Trip> out = new ArrayList<>(recorded);
@@ -197,9 +212,11 @@ final class NaviHistory {
             }
             if (same < 0) {
                 out.add(r);
-            } else if (out.get(same).name == null && r.name != null) {
+            } else {
                 Trip g = out.get(same);
-                out.set(same, g.withLabel(r.name, g.address, true));
+                String address = g.address == null || g.address.isEmpty() ? r.address : g.address;
+                Trip named = g.withLabel(g.name, address, true);
+                out.set(same, r.naviName != null && g.naviName == null ? named.withNaviName(r.naviName) : named);
             }
         }
         return out;
@@ -292,7 +309,7 @@ final class NaviHistory {
         JSONArray a = new JSONArray();
         for (Route r : routes) {
             a.put(new JSONObject().put("id", r.id).put("ms", r.ms).put("lat", r.lat).put("lon", r.lon)
-                    .put("t", r.title).put("d", r.description));
+                    .put("t", r.title).put("d", r.description).put("org", r.org));
         }
         return a.toString();
     }
@@ -305,7 +322,7 @@ final class NaviHistory {
             for (int i = 0; i < a.length(); i++) {
                 JSONObject o = a.getJSONObject(i);
                 Route r = new Route(o.getString("id"), o.getLong("ms"), o.getDouble("lat"), o.getDouble("lon"),
-                        o.optString("t"), o.optString("d"));
+                        o.optString("t"), o.optString("d"), o.optBoolean("org"));
                 // v0.4.0 kept unparsed routes (no id, coordinates ~0): drop them
                 if (!r.id.isEmpty() && place(r.lat, r.lon)) out.add(r);
             }

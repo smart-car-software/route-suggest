@@ -242,7 +242,7 @@ public final class RouteService extends Service {
             Suggestion s = chosen.has("s") ? Suggestion.fromJson(chosen.getJSONObject("s")) : null;
             if (s != null && s.hasGeo() && at >= t.startMs - 30 * 60_000L && at <= t.endMs
                     && Geo.meters(s.lat, s.lon, t.endLat, t.endLon) <= CHOSEN_M) {
-                name = s.name;
+                name = s.name == null || s.name.trim().isEmpty() ? null : s.name; // a label is no name
             }
         } catch (JSONException ignored) {
         }

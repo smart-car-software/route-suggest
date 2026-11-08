@@ -33,6 +33,11 @@ final class Trip {
     final String name;
     final String address;
     final boolean navigated;
+    /**
+     * An organisation's title from the Navigator («Kazan Kremlin»): below the name the driver
+     * chose and a bookmark, above an address.
+     */
+    String naviName;
 
     Trip(long id, long startMs, double startLat, double startLon, long endMs, double endLat,
          double endLon, String name, String address, boolean navigated) {
@@ -53,8 +58,16 @@ final class Trip {
     }
 
     Trip withLabel(String name, String address, boolean navigated) {
-        return new Trip(id, startMs, startLat, startLon, endMs, endLat, endLon, name, address,
+        Trip t = new Trip(id, startMs, startLat, startLon, endMs, endLat, endLon, name, address,
                 navigated);
+        t.naviName = naviName;
+        return t;
+    }
+
+    Trip withNaviName(String naviName) {
+        Trip t = withLabel(name, address, true);
+        t.naviName = naviName;
+        return t;
     }
 
     double meters() {

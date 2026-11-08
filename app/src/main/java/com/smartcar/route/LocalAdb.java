@@ -103,13 +103,15 @@ final class LocalAdb implements Closeable {
      */
     static LocalAdb connect(Context context, StringBuilder report) throws IOException {
         KeyPair keys = keyPair(context);
-        StringBuilder why = new StringBuilder();
+        java.util.Map<String, StringBuilder> why = new java.util.LinkedHashMap<>();
         for (int port : PORTS) {
             Socket s = new Socket();
             try {
                 s.connect(new InetSocketAddress("127.0.0.1", port), 1500);
             } catch (IOException e) {
-                why.append(why.length() > 0 ? ", " : "").append(port).append(": ").append(Errors.text(e));
+                DebugLog.w("adb", port + ": " + e);
+                StringBuilder b = reason(why, e, false);
+                b.append(b.length() > 0 ? "/" : "").append(port);
                 closeQuietly(s);
                 continue;
             }
@@ -120,10 +122,28 @@ final class LocalAdb implements Closeable {
                 return adb;
             } catch (IOException e) {
                 adb.close();
-                why.append(why.length() > 0 ? ", " : "").append(port).append(": ").append(Errors.text(e));
+                DebugLog.w("adb", port + " handshake: " + e);
+                StringBuilder b = reason(why, e, true);
+                b.append(b.length() > 0 ? "/" : "").append(port);
             }
         }
-        throw new IOException("нет ADB по сети на 127.0.0.1 (" + why + ")");
+        StringBuilder sb = new StringBuilder();
+        for (java.util.Map.Entry<String, StringBuilder> w : why.entrySet()) {
+            sb.append(sb.length() > 0 ? ", " : "").append(w.getValue()).append(" — ").append(w.getKey());
+        }
+        throw new IOException("нет ADB по сети (" + sb + "). Включите «ADB по сети», как для MConfig+");
+    }
+
+    /** The ports that failed for the same plain reason, under that reason. */
+    private static StringBuilder reason(java.util.Map<String, StringBuilder> why, IOException e,
+                                        boolean afterConnect) {
+        String r;
+        if (e instanceof java.net.SocketTimeoutException) r = "нет ответа";
+        else if (e instanceof java.io.EOFException) r = afterConnect ? "не adbd" : "закрыт";
+        else if (String.valueOf(e.getMessage()).contains("ECONNREFUSED")
+                || e instanceof java.net.ConnectException) r = "отказ";
+        else r = Errors.text(e);
+        return why.computeIfAbsent(r, k -> new StringBuilder());
     }
 
     private void handshake(KeyPair keys, StringBuilder report) throws IOException {
