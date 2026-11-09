@@ -8,3 +8,6 @@ local.properties
 
 # Local secrets: release signing
 .env
+
+# APKs (the modded Navigator for the emulator, build outputs)
+*.apk
