@@ -108,7 +108,7 @@ public class SuggesterTest {
         List<Suggestion> s = Suggester.menu(input(at(11, 10, 17, 45), WORK, trips, places));
         assertEquals(Arrays.asList("Ice Power · по вторникам", "Домой", "Место в 8,2 км",
                 "Бассейн", "Кафе", "Аптека"), rows(s));
-        assertEquals("Ленина 1", s.get(5).query);
+        assertEquals("Аптека, Ленина 1", s.get(5).query);
         // At home: work comes in its place among the rest, by its four drives.
         List<Suggestion> h = Suggester.menu(input(at(11, 10, 17, 45), HOME, trips, places));
         assertEquals(Arrays.asList("Ice Power · по вторникам", "На работу", "Место в 16 км",
@@ -136,6 +136,21 @@ public class SuggesterTest {
         Suggestion b = Suggester.menu(input(at(11, 10, 17, 45), HOME, trips, places)).get(1);
         assertEquals("Ромашка", b.row);
         assertEquals(CAFE[0] + 0.0005, b.lat, 1e-9);
+    }
+
+    @Test
+    public void geocodedEventGoesByItsText() {
+        Suggester.Input in = input(at(11, 10, 17, 45), HOME, Collections.emptyList(), YANDEX);
+        in.events = Arrays.asList(
+                new CalEvent("Ужин", at(11, 10, 18, 0), at(11, 10, 20, 0), "Ромашка, Баумана 5", "",
+                        Double.NaN, Double.NaN).geocodedAt(SHOP[0], SHOP[1]),
+                new CalEvent("Врач", at(11, 10, 18, 30), at(11, 10, 19, 0), "Клиника", "",
+                        CAFE[0], CAFE[1]));
+        List<Suggestion> s = Suggester.suggest(in);
+        assertEquals("Ромашка, Баумана 5", s.get(0).query);
+        assertTrue(s.get(0).hasGeo());
+        // The calendar's own coordinates: the route goes there.
+        assertEquals("", s.get(1).query);
     }
 
     @Test

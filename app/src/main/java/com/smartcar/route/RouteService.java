@@ -161,6 +161,7 @@ public final class RouteService extends Service {
         lm = (LocationManager) getSystemService(LOCATION_SERVICE);
         startLocation();
         registerReceiver(screen, new IntentFilter(Intent.ACTION_SCREEN_ON));
+        restoreAutoGo();
         menu = new ClusterMenu(this, this::menuRows);
         if (ClusterMenu.on(this)) menu.start();
         // Created at boot (BootReceiver) — the ignition — or by opening the app.
@@ -382,8 +383,7 @@ public final class RouteService extends Service {
                 // A miss is not kept: it may be the network, not the address.
                 if (geo != null) cache.edit().putString(key, geo[0] + "," + geo[1]).apply();
             }
-            out.add(geo == null ? e : new CalEvent(e.title, e.startMs, e.endMs, e.location, e.place,
-                    geo[0], geo[1]));
+            out.add(geo == null ? e : e.geocodedAt(geo[0], geo[1]));
         }
         return out;
     }
@@ -409,6 +409,32 @@ public final class RouteService extends Service {
     private int bootCount() {
         return android.provider.Settings.Global.getInt(getContentResolver(),
                 android.provider.Settings.Global.BOOT_COUNT, -1);
+    }
+
+    /**
+     * A force-stop of this app (Settings' «Остановить», a memory cleaner) takes AutoGoService out
+     * of the enabled services for good — Android does that (seen on the emulator). Once turned
+     * on as root, it is turned on again the same way at each start.
+     */
+    private void restoreAutoGo() {
+        if (AutoGoService.granted(this)) {
+            // On already (maybe from an older version): remember it, to restore it later.
+            prefs(this).edit().putBoolean(AutoGoService.PREF_ROOT, true).apply();
+            return;
+        }
+        if (!AutoGoService.on(this)
+                || !prefs(this).getBoolean(AutoGoService.PREF_ROOT, false)) {
+            return;
+        }
+        worker.execute(() -> {
+            try {
+                AutoGoService.enableAsRoot(this);
+                Journal.add(this, "«Поехали»: спецвозможность была выключена — включена снова");
+            } catch (IOException e) {
+                Journal.add(this, "«Поехали»: спецвозможность выключена, включить не удалось: "
+                        + Errors.text(e));
+            }
+        });
     }
 
     // ------------------------------------------------------------------ the menu on the cluster
@@ -534,7 +560,11 @@ public final class RouteService extends Service {
         } catch (JSONException ignored) {
         }
         // Arm before the Navigator comes up: its route overview is what AutoGoService waits for.
-        if (s.hasGeo()) AutoGoService.arm(c);
+        // Alice leads by herself — nothing to press then.
+        if (!Navigator.viaAlice(s, Navigator.online(c))
+                && (s.hasGeo() || Navigator.latLon(s.query) != null)) {
+            AutoGoService.arm(c);
+        }
         return Navigator.open(c, s);
     }
 

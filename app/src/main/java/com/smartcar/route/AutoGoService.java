@@ -40,6 +40,8 @@ import java.util.Locale;
 public final class AutoGoService extends AccessibilityService {
     static final long ARMED_MS = 25_000L;
     static final String PREF = "autogo";
+    /** Turned on as root once: the service turns it on again after a force-stop. */
+    static final String PREF_ROOT = "autogo_root";
     /** The button's text in the Russian and the English interface. */
     static final String[] LABELS = {"поехали", "go", "в путь"};
 

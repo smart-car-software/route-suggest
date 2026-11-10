@@ -41,7 +41,20 @@ final class CalEvent {
         this.lon = lon;
     }
 
+    /**
+     * The coordinates are ours, from the address (OSM Nominatim: the middle of the house, maybe
+     * the wrong side for a route), not the calendar's or a bookmark's: the route then goes by
+     * the location's text, and they serve only to tell places apart.
+     */
+    boolean geocoded;
+
     boolean hasGeo() {
         return Geo.valid(lat, lon);
+    }
+
+    CalEvent geocodedAt(double lat, double lon) {
+        CalEvent e = new CalEvent(title, startMs, endMs, location, place, lat, lon);
+        e.geocoded = true;
+        return e;
     }
 }

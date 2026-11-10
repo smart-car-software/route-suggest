@@ -44,7 +44,15 @@ The user's Mac has a Claude session with Android Studio and an Android 9 arm64 e
 - Data sources: own GPS for the drives (the Navigator exposes no destination — see README),
   `NaviListener` only for «is it guiding now», Yandex DataSync via the app's own Yandex login
   (magic link, like calendar-bot's `calbot/yandex.py`), the calendars (above).
-- `build_route_on_map` works unsigned (checked on the emulator): it opens the route overview,
-  the driver presses «Поехали».
+- Routes (`Navigator`, all checked on the emulator, mod 30.3.0): coordinates →
+  `build_route_on_map` (overview, AutoGo presses «Поехали»); a name/address only, or our own
+  Nominatim point (the middle of the house) → Alice `ask_alice?text=Маршрут до … едем` (leads at
+  once; needs network and ru locale). Never `map_search` for a route (a card, needs a finger),
+  never `rtext` with text (ignored), never coordinates to Alice (she swaps lat/lon). The mNavi
+  READY_TO_GO/LETS_GO handshake does not exist in mod 30.3.0.
+- A place's point (`Suggester.point`): a Yandex place nearby, else the Navigator's own
+  destination for drives there (`Trip.dest`), else the middle of the stops.
+- A force-stop of the app drops AutoGoService from the enabled services (Android does it);
+  `RouteService` turns it on again as root at start.
 - Car Notification Service's contract is copied in `NotifyClient` (its docs/API.md).
 - Logcat never gets coordinates, addresses or event titles.

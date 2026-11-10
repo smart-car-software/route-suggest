@@ -152,8 +152,9 @@ final class Suggester {
             // Only a known place's name is remembered for the drive: «Ужин» is not a place.
             String name = e.place;
             if (e.hasGeo()) {
+                // Our own geocoding is the middle of the house: the route goes by the text.
                 rows.add(Suggestion.Kind.EVENT, clip(e.title, LABEL_WITH_SUFFIX) + " · " + when, name,
-                        e.lat, e.lon, "");
+                        e.lat, e.lon, e.geocoded ? e.location : "");
             } else if (!e.location.isEmpty()) {
                 rows.add(Suggestion.Kind.EVENT, clip(e.title, LABEL_WITH_SUFFIX) + " · " + when, name,
                         Double.NaN, Double.NaN, e.location);
@@ -252,8 +253,10 @@ final class Suggester {
                     : p.kind == Place.Kind.WORK ? Suggestion.Kind.WORK : Suggestion.Kind.FREQUENT;
             String label = p.kind == Place.Kind.HOME ? "Домой"
                     : p.kind == Place.Kind.WORK ? "На работу" : clip(p.name, LABEL);
-            all.add(new Candidate(kind, label, p.name, p.lat, p.lon,
-                    p.hasGeo() ? "" : (p.address.isEmpty() ? p.name : p.address), visits));
+            // No coordinates (an organisation bookmark): Alice finds it by its name and address.
+            String text = p.address.isEmpty() || p.address.contains(p.name) ? (p.address.isEmpty()
+                    ? p.name : p.address) : p.name + ", " + p.address;
+            all.add(new Candidate(kind, label, p.name, p.lat, p.lon, p.hasGeo() ? "" : text, visits));
         }
         for (Cluster c : clusters) {
             if (c.trips.size() < FREQUENT_MIN) continue;

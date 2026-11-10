@@ -327,6 +327,7 @@ public final class MainActivity extends Activity {
             boolean done;
             try {
                 AutoGoService.enableAsRoot(this);
+                RouteService.prefs(this).edit().putBoolean(AutoGoService.PREF_ROOT, true).apply();
                 done = true;
             } catch (java.io.IOException e) {
                 DebugLog.w("AutoGo", "as root: " + Errors.text(e));
