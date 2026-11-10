@@ -126,20 +126,72 @@ final class Navigator {
         return ni != null && ni.isConnected();
     }
 
+    /** Alice on a Navigator that was not running lost the text once in two (emulator). */
+    static final long WARM_UP_MS = 5_000L;
+
     static boolean open(Context c, Suggestion s) {
-        for (String[] cand : candidates(s, online(c))) {
+        List<String[]> all = candidates(s, online(c));
+        if (!all.isEmpty() && all.get(0)[1].startsWith("yandexnavi://ask_alice") && installed(c, NAVI)) {
+            String uri = all.get(0)[1];
+            Context app = c.getApplicationContext();
+            new Thread(() -> {
+                if (!running(app)) {
+                    Intent launch = app.getPackageManager().getLaunchIntentForPackage(NAVI);
+                    if (launch != null) {
+                        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        try {
+                            app.startActivity(launch);
+                            Thread.sleep(WARM_UP_MS);
+                        } catch (RuntimeException | InterruptedException e) {
+                            DebugLog.w("Navigator", "warm-up: " + e);
+                        }
+                    }
+                }
+                start(app, NAVI, uri);
+            }, "alice").start();
+            return true;
+        }
+        return openFirst(c, all);
+    }
+
+    /**
+     * Whether the Navigator's process is up: {@code pidof} through the unit's adb (root is not
+     * needed for it, the adb connection is). Unknown counts as not running — a warm-up then.
+     * Blocking.
+     */
+    private static boolean running(Context c) {
+        // Only when the unit already trusts our adb key: else it would ask «allow debugging?».
+        if (!NaviReader.enabled(c) && !RouteService.prefs(c).getBoolean(AutoGoService.PREF_ROOT, false)) {
+            return false;
+        }
+        StringBuilder out = new StringBuilder();
+        try (LocalAdb adb = LocalAdb.connect(c, new StringBuilder())) {
+            adb.shell("pidof " + NAVI + " || echo NONE", out::append);
+        } catch (java.io.IOException | RuntimeException e) {
+            return false;
+        }
+        String o = out.toString().trim();
+        return !o.isEmpty() && !o.contains("NONE") && o.matches("(?s)\\d+.*");
+    }
+
+    private static boolean start(Context c, String pkg, String uri) {
+        Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse(uri));
+        if (pkg != null) i.setPackage(pkg);
+        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        try {
+            c.startActivity(i);
+            DebugLog.i("Navigator", "route: " + uri.replaceAll("\\?.*", ""));
+            return true;
+        } catch (ActivityNotFoundException | SecurityException e) {
+            DebugLog.w("Navigator", "cannot open " + pkg + ": " + e);
+            return false;
+        }
+    }
+
+    private static boolean openFirst(Context c, List<String[]> all) {
+        for (String[] cand : all) {
             if (cand[0] != null && !installed(c, cand[0])) continue;
-            Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse(cand[1]));
-            if (cand[0] != null) i.setPackage(cand[0]);
-            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            try {
-                c.startActivity(i);
-                // No address or coordinates in the log.
-                DebugLog.i("Navigator", "route: " + cand[1].replaceAll("\\?.*", ""));
-                return true;
-            } catch (ActivityNotFoundException | SecurityException e) {
-                DebugLog.w("Navigator", "cannot open " + cand[0] + ": " + e);
-            }
+            if (start(c, cand[0], cand[1])) return true; // no address or coordinates in the log
         }
         return false;
     }

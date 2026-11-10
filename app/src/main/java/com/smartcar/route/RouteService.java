@@ -73,8 +73,6 @@ public final class RouteService extends Service {
     static final long CARD_TIMEOUT_MS = 45_000L;
     static final long CARD_EXPIRE_MS = 3 * 60_000L;
     static final long YANDEX_SYNC_MS = 6 * 3600_000L;
-    /** A drive ending this close to the chosen row was a drive there. */
-    static final double CHOSEN_M = 400;
 
     private static final String CHANNEL = "route";
     private static final String TAG = "Service";
@@ -265,10 +263,7 @@ public final class RouteService extends Service {
             JSONObject chosen = new JSONObject(p.getString("chosen", "{}"));
             long at = chosen.optLong("at");
             Suggestion s = chosen.has("s") ? Suggestion.fromJson(chosen.getJSONObject("s")) : null;
-            if (s != null && s.hasGeo() && at >= t.startMs - 30 * 60_000L && at <= t.endMs
-                    && Geo.meters(s.lat, s.lon, t.endLat, t.endLon) <= CHOSEN_M) {
-                name = s.name == null || s.name.trim().isEmpty() ? null : s.name; // a label is no name
-            }
+            name = Suggester.chosenName(s, at, t);
         } catch (JSONException ignored) {
         }
         boolean navigated = p.getLong("navigated_at", 0) >= t.startMs - 5 * 60_000L;

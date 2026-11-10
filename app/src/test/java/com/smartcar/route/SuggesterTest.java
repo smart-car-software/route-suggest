@@ -19,6 +19,7 @@ package com.smartcar.route;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
@@ -153,6 +154,45 @@ public class SuggesterTest {
         assertEquals(Arrays.asList("На работу", "Ромашка", "Ice Power", "Аптека"), rows(s));
         assertEquals(POOL[0] + 0.0005, s.get(1).lat, 1e-9);
         assertEquals("", s.get(1).query);
+    }
+
+    @Test
+    public void aDriveAfterAnAliceRowIsNamedAfterIt() {
+        Suggestion alice = new Suggestion(Suggestion.Kind.FREQUENT, "Ice Power fitness",
+                "Ice Power fitness", Double.NaN, Double.NaN, "Ice Power fitness, ул. Рихарда Зорге, 66");
+        long chosen = at(11, 10, 18, 0);
+        Trip soon = trip(chosen + 2 * 60_000L, HOME, GYM);
+        assertEquals("Ice Power fitness", Suggester.chosenName(alice, chosen, soon));
+        assertNull(Suggester.chosenName(alice, chosen, trip(chosen + 20 * 60_000L, HOME, GYM)));
+        // A row with a point: by where the drive ended.
+        Suggestion home = new Suggestion(Suggestion.Kind.HOME, "Домой", "Дом", HOME[0], HOME[1], "");
+        assertEquals("Дом", Suggester.chosenName(home, chosen, trip(chosen + 60_000L, WORK, HOME)));
+        assertNull(Suggester.chosenName(home, chosen, trip(chosen + 60_000L, WORK, SHOP)));
+        // A label is no name.
+        Suggestion unnamed = new Suggestion(Suggestion.Kind.FREQUENT, "Место в 2 км", "", GYM[0], GYM[1], "");
+        assertNull(Suggester.chosenName(unnamed, chosen, trip(chosen + 60_000L, HOME, GYM)));
+    }
+
+    @Test
+    public void bookmarkAddressMatchesTheNavigatorsTitle() {
+        assertTrue(Suggester.sameAddress("ул. Рихарда Зорге, 66", "улица Рихарда Зорге, 66"));
+        assertTrue(Suggester.sameAddress("ул. Рихарда Зорге, 66", "Казань, улица Рихарда Зорге 66"));
+        assertFalse(Suggester.sameAddress("ул. Рихарда Зорге, 66", "улица Рихарда Зорге, 6"));
+        assertFalse(Suggester.sameAddress("ул. Рихарда Зорге, 66", "улица Рихарда Зорге, 66А"));
+        assertFalse(Suggester.sameAddress("Казань", "Казань"));
+        // A drive the Navigator kept as an address: the organisation bookmark gets it.
+        List<Place> places = new ArrayList<>(YANDEX);
+        places.add(new Place(Place.Kind.BOOKMARK, "Ice Power fitness", "ул. Рихарда Зорге, 66",
+                Double.NaN, Double.NaN));
+        List<Trip> trips = new ArrayList<>();
+        for (int d = 1; d <= 3; d++) {
+            trips.add(new Trip(0, at(11, d, 12, 0), HOME[0], HOME[1], at(11, d, 12, 20), POOL[0],
+                    POOL[1], null, "улица Рихарда Зорге, 66", true).withDest(POOL[0], POOL[1]));
+        }
+        List<Suggestion> s = Suggester.menu(input(at(11, 10, 17, 45), HOME, trips, places));
+        assertEquals("Ice Power fitness", s.get(1).row);
+        assertTrue(s.get(1).hasGeo());
+        assertEquals(s.size(), new java.util.HashSet<>(rows(s)).size()); // the address row is not there twice
     }
 
     @Test

@@ -206,6 +206,44 @@ final class Suggester {
         return rows.out;
     }
 
+    /** A drive ending this close to the chosen row was a drive there. */
+    static final double CHOSEN_M = 400;
+    /** A row with no point (Alice found it): the drive that started this soon after is to it. */
+    static final long CHOSEN_TEXT_MS = 10 * 60_000L;
+
+    /**
+     * The name a drive gets from the row chosen for it, or null: a row with a point — the drive
+     * ended within {@link #CHOSEN_M} of it; a row known by its text only (an organisation
+     * bookmark, Alice led) — the drive started within {@link #CHOSEN_TEXT_MS} after the choice.
+     * A label («Место в 2 км») is no name.
+     */
+    static String chosenName(Suggestion s, long chosenAt, Trip t) {
+        if (s == null || s.name == null || s.name.trim().isEmpty()) return null;
+        if (chosenAt < t.startMs - 30 * 60_000L || chosenAt > t.endMs) return null;
+        if (s.hasGeo()) {
+            return Geo.meters(s.lat, s.lon, t.endLat, t.endLon) <= CHOSEN_M ? s.name : null;
+        }
+        return !s.query.isEmpty() && t.startMs - chosenAt <= CHOSEN_TEXT_MS ? s.name : null;
+    }
+
+    /** «ул. Рихарда Зорге, 66» and «улица Рихарда Зорге 66» are one address. Pure. */
+    static String normAddress(String s) {
+        String t = EventFilter.norm(s);
+        t = (" " + t + " ").replace(" ул ", " улица ").replace(" пр кт ", " проспект ")
+                .replace(" просп ", " проспект ").replace(" пр ", " проспект ")
+                .replace(" пер ", " переулок ").replace(" ш ", " шоссе ").replace(" д ", " ")
+                .replace(" г ", " ");
+        return t.trim().replaceAll("\\s+", " ");
+    }
+
+    /** Whether a drive's address is the bookmark's: one holds the other, a house number in it. */
+    static boolean sameAddress(String place, String drive) {
+        String a = normAddress(place), b = normAddress(drive);
+        if (a.isEmpty() || b.isEmpty() || !a.matches(".*\\d.*")) return false;
+        return a.endsWith(b) || b.endsWith(a) || a.contains(" " + b) || b.contains(" " + a)
+                || a.equals(b);
+    }
+
     /** One more place for the menu, with how many drives ended there. */
     private static final class Candidate {
         final Suggestion.Kind kind;
@@ -259,8 +297,7 @@ final class Suggester {
             // for it, if it led there; else Alice finds it by its name and address.
             Cluster same = null;
             for (Cluster c : clusters) {
-                if (c.name != null && c.name.trim().equalsIgnoreCase(p.name.trim())
-                        && (same == null || c.trips.size() > same.trips.size())) {
+                if (sameOrganisation(c, p) && (same == null || c.trips.size() > same.trips.size())) {
                     same = c;
                 }
             }
@@ -292,6 +329,24 @@ final class Suggester {
         all.sort((a, b) -> a.visits != b.visits ? Integer.compare(b.visits, a.visits)
                 : a.label.compareToIgnoreCase(b.label));
         for (Candidate c : all) rows.add(c.kind, c.label, c.name, c.lat, c.lon, c.query);
+    }
+
+    /**
+     * Drives to an organisation bookmark (no point): named after it (the row chosen, the
+     * Navigator's title), or ending at its address — the Navigator keeps a route Alice built as
+     * an address, «улица Рихарда Зорге, 66», not the organisation (emulator, mod 30.3.0).
+     */
+    private static boolean sameOrganisation(Cluster c, Place p) {
+        String name = p.name.trim();
+        if (c.name != null && c.name.trim().equalsIgnoreCase(name)) return true;
+        for (Trip t : c.trips) {
+            if (t.name != null && t.name.trim().equalsIgnoreCase(name)) return true;
+            if (t.naviName != null && t.naviName.trim().equalsIgnoreCase(name)) return true;
+            if (!p.address.isEmpty() && t.address != null && sameAddress(p.address, t.address)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** The rows so far: at most {@code max}, none where the car is, one per place. */
