@@ -38,6 +38,13 @@ final class Trip {
      * chose and a bookmark, above an address.
      */
     String naviName;
+    /**
+     * Where the Navigator was told to go, when the drive came with a route of its own: Yandex's
+     * point for the place (an organisation's entrance), better for a route than where the car
+     * stopped (the other side of the building, a car park). NaN when unknown.
+     */
+    double destLat = Double.NaN;
+    double destLon = Double.NaN;
 
     Trip(long id, long startMs, double startLat, double startLon, long endMs, double endLat,
          double endLon, String name, String address, boolean navigated) {
@@ -61,7 +68,20 @@ final class Trip {
         Trip t = new Trip(id, startMs, startLat, startLon, endMs, endLat, endLon, name, address,
                 navigated);
         t.naviName = naviName;
+        t.destLat = destLat;
+        t.destLon = destLon;
         return t;
+    }
+
+    Trip withDest(double lat, double lon) {
+        Trip t = withLabel(name, address, navigated);
+        t.destLat = lat;
+        t.destLon = lon;
+        return t;
+    }
+
+    boolean hasDest() {
+        return Geo.valid(destLat, destLon);
     }
 
     Trip withNaviName(String naviName) {

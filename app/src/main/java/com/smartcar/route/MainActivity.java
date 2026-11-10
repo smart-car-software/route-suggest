@@ -67,6 +67,7 @@ public final class MainActivity extends Activity {
     private Button menu;
     private Button menuGrant;
     private Button menuTrial;
+    private TextView journal;
     private volatile YandexAccount.Login login;
 
     static void showSuggestions(Context c) {
@@ -165,6 +166,14 @@ public final class MainActivity extends Activity {
                     main.post(this::refresh);
                 }))
                 .setNegativeButton(R.string.cancel, null).show()));
+        TextView journalTitle = text(getString(R.string.journal), 20, true);
+        journalTitle.setPadding(0, dp(16), 0, 0);
+        root.addView(journalTitle);
+        root.addView(hint(getString(R.string.journal_hint)));
+        journal = text("", 13, false);
+        journal.setTypeface(android.graphics.Typeface.MONOSPACE);
+        journal.setTextIsSelectable(true);
+        root.addView(journal);
 
         if (!RouteService.isStarted()) RouteService.start(this, false);
         if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
@@ -239,8 +248,10 @@ public final class MainActivity extends Activity {
             int trips = TripStore.get(this).count();
             String s = statusText(trips);
             List<CalAccount> accounts = CalStore.load(this);
+            String log = Journal.text(this);
             main.post(() -> {
                 status.setText(s);
+                journal.setText(log.isEmpty() ? "—" : log);
                 drawCalendars(accounts);
                 naviHistory.setText(NaviReader.enabled(this) ? R.string.navi_history_off
                         : R.string.navi_history_on);

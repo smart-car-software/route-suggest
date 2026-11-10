@@ -291,6 +291,7 @@ public final class RouteService extends Service {
         SharedPreferences p = prefs(this);
         boolean sameBoot = p.getInt("prompt_boot", -1) == bootCount();
         if (!now && sameBoot && System.currentTimeMillis() - p.getLong("prompt_at", 0) < PROMPT_GAP_MS) {
+            Journal.add(this, "запуск: карточка уже была меньше 10 минут назад");
             return;
         }
         if (promptRunning) return;
@@ -342,8 +343,12 @@ public final class RouteService extends Service {
         keepEvents(events);
 
         if (!now && NaviListener.guiding()) {
-            DebugLog.i(TAG, "the Navigator already leads a route: no question");
+            Journal.add(this, "запуск: Навигатор уже ведёт по маршруту — без карточки");
             return;
+        }
+        if (!now) {
+            Journal.add(this, "запуск: событий " + events.size() + ", геопозиция "
+                    + (lastFixAt > armedFix ? "свежая" : lastFix != null ? "старая" : "нет"));
         }
         List<Suggestion> list = suggestions(events);
         prefs(this).edit().putLong("prompt_at", System.currentTimeMillis())
@@ -473,14 +478,15 @@ public final class RouteService extends Service {
 
     private void show(List<Suggestion> list, boolean asked) {
         if (!asked && !cardAtStart(this)) {
-            DebugLog.i(TAG, "the card at start is off");
+            Journal.add(this, "запуск: карточка выключена в приложении");
             return;
         }
         if (!asked && !Suggester.worthAsking(list)) {
             // Home, work, the frequent places: in the menu on the cluster, no card for them.
-            DebugLog.i(TAG, "no event or routine: no card");
+            Journal.add(this, "запуск: нет события в календаре и привычной поездки — без карточки");
             return;
         }
+        if (!asked) Journal.add(this, "запуск: карточка, строк " + list.size());
         if (list.isEmpty()) {
             DebugLog.i(TAG, "nothing to offer");
             if (asked && NotifyClient.installed(this)) {

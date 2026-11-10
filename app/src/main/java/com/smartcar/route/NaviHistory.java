@@ -98,7 +98,7 @@ final class NaviHistory {
          */
         Trip trip() {
             Trip t = new Trip(0, ms, lat, lon, ms, lat, lon, null, org ? description : title, true);
-            return org && !title.isEmpty() ? t.withNaviName(title) : t;
+            return (org && !title.isEmpty() ? t.withNaviName(title) : t).withDest(lat, lon);
         }
     }
 
@@ -258,7 +258,8 @@ final class NaviHistory {
                 Trip g = out.get(same);
                 String address = g.address == null || g.address.isEmpty() ? r.address : g.address;
                 Trip named = g.withLabel(g.name, address, true);
-                out.set(same, r.naviName != null && g.naviName == null ? named.withNaviName(r.naviName) : named);
+                if (r.naviName != null && g.naviName == null) named = named.withNaviName(r.naviName);
+                out.set(same, named.withDest(r.endLat, r.endLon));
             }
         }
         return out;

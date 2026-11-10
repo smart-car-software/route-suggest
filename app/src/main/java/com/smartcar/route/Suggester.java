@@ -171,8 +171,9 @@ final class Suggester {
             String when = r.weekly ? "по " + BY_DAY[now.getDayOfWeek().getValue() - 1]
                     : "обычно в это время";
             // «Место в 2,5 км» is a label, not a name to remember for the place.
+            double[] at = point(r.cluster, in.places);
             rows.add(Suggestion.Kind.ROUTINE, clip(label, LABEL_WITH_SUFFIX) + " · " + when,
-                    r.cluster.name == null ? "" : r.cluster.name, r.cluster.lat, r.cluster.lon, "");
+                    r.cluster.name == null ? "" : r.cluster.name, at[0], at[1], "");
         }
 
         if (located && home != null && home.metersTo(in.hereLat, in.hereLon) <= AT_M) {
@@ -195,8 +196,9 @@ final class Suggester {
         for (Cluster c : frequent) {
             if (added >= FREQUENT_ROWS) break;
             String label = c.name != null ? c.name : unnamed(c, in);
+            double[] at = point(c, in.places);
             if (rows.add(Suggestion.Kind.FREQUENT, clip(label, LABEL), c.name == null ? "" : c.name,
-                    c.lat, c.lon, "")) {
+                    at[0], at[1], "")) {
                 added++;
             }
         }
@@ -261,8 +263,9 @@ final class Suggester {
             }
             if (covered) continue;
             String label = c.name != null ? c.name : unnamed(c, in);
+            double[] at = point(c, in.places);
             all.add(new Candidate(Suggestion.Kind.FREQUENT, clip(label, LABEL),
-                    c.name == null ? "" : c.name, c.lat, c.lon, "", c.trips.size()));
+                    c.name == null ? "" : c.name, at[0], at[1], "", c.trips.size()));
         }
         all.sort((a, b) -> a.visits != b.visits ? Integer.compare(b.visits, a.visits)
                 : a.label.compareToIgnoreCase(b.label));
@@ -407,6 +410,32 @@ final class Suggester {
         if (best != null) return best.name;
         String org = mostCommon(c, 1);
         return org != null ? org : mostCommon(c, 2);
+    }
+
+    /**
+     * Where to send the Navigator for a place: a Yandex place within {@link #NAME_M} (its own
+     * point — an organisation's entrance), else the latest point the Navigator itself was given
+     * for drives there, else the middle of where the car stopped — which can be the far side of
+     * the building (seen in the car).
+     */
+    static double[] point(Cluster c, List<Place> places) {
+        Place best = null;
+        double bestM = NAME_M;
+        for (Place p : places) {
+            if (!p.hasGeo()) continue;
+            double m = p.metersTo(c.lat, c.lon);
+            if (m <= bestM) {
+                best = p;
+                bestM = m;
+            }
+        }
+        if (best != null) return new double[]{best.lat, best.lon};
+        Trip latest = null;
+        for (Trip t : c.trips) {
+            if (t.hasDest() && (latest == null || t.endMs > latest.endMs)) latest = t;
+        }
+        if (latest != null) return new double[]{latest.destLat, latest.destLon};
+        return new double[]{c.lat, c.lon};
     }
 
     /** what: 0 — the chosen name, 1 — the Navigator's organisation, 2 — the address. */

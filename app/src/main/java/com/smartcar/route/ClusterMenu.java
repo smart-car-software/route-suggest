@@ -56,8 +56,9 @@ import java.util.concurrent.Executors;
  * {@link #KEY_UP} / {@link #KEY_DOWN} / {@link #KEY_OK}. The list itself is our overlay window on
  * the cluster display, put where the tab's panel is ({@link #X}, {@link #Y}).
  *
- * <p>Not shown while the Navigator leads a route (its map is what that tab is for then), and
- * gone once a row is chosen, until the tab is opened again. Off with the switch in the app.
+ * <p>Up whenever that tab is (as mNavi's), a route led or not; a chosen row does not take it
+ * away — gone, it left the tab's empty panel (v0.6.0 in the car). What the unit said and did
+ * goes to the {@link Journal}. Off with the switch in the app.
  */
 final class ClusterMenu {
     static final String PREF = "cluster_menu";
@@ -167,16 +168,17 @@ final class ClusterMenu {
                         });
                 cls.getMethod("registerDimMenuInteractionCallback", cb).invoke(dim, callback);
                 state = "подключено";
-                DebugLog.i(TAG, "DIM menu callback registered");
+                Journal.add(c, "меню: подписка на приборку есть; методы: " + methods(cls)
+                        + "; колбэк: " + methods(cb));
             } catch (ClassNotFoundException e) {
                 dim = null;
                 state = "нет ECarX (не магнитола Monjaro?)";
-                DebugLog.i(TAG, "no " + DIM_CLASS);
+                Journal.add(c, "меню: нет ECarX DimMenuInteraction");
             } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
                 dim = null;
                 state = "ошибка: " + Errors.text(e instanceof java.lang.reflect.InvocationTargetException
                         && e.getCause() != null ? e.getCause() : e);
-                DebugLog.w(TAG, "DIM menu: " + e);
+                Journal.add(c, "меню: подписка не удалась: " + state);
             }
         });
     }
@@ -210,16 +212,27 @@ final class ClusterMenu {
     private void onUnitCall(Method m, Object[] args) {
         String name = m.getName();
         if (m.getDeclaringClass() == Object.class) return;
+        Journal.add(c, "приборка: " + name + (args == null ? "()" : java.util.Arrays.toString(args)));
         if ("onTabChanged".equals(name) && args != null && args.length == 1
                 && args[0] instanceof Integer) {
             int tab = (Integer) args[0];
-            DebugLog.i(TAG, "tab " + tab);
             state = "подключено, вкладка " + tab;
             main.post(() -> {
                 if (tab == NAVI_TAB) show(0);
                 else hide();
             });
         }
+    }
+
+    /** The class's own public methods, for the journal: what else the unit offers. */
+    private static String methods(Class<?> cls) {
+        StringBuilder sb = new StringBuilder();
+        for (Method m : cls.getDeclaredMethods()) {
+            if (!java.lang.reflect.Modifier.isPublic(m.getModifiers())) continue;
+            if (sb.length() > 0) sb.append(", ");
+            sb.append(m.getName()).append('(').append(m.getParameterCount()).append(')');
+        }
+        return sb.toString();
     }
 
     private static Object defaultValue(Class<?> t) {
@@ -236,7 +249,12 @@ final class ClusterMenu {
         @Override
         public void onReceive(Context ctx, Intent i) {
             String a = i.getAction();
-            if (a == null || view == null) return;
+            if (a == null) return;
+            if (view == null) {
+                Journal.add(c, "джойстик " + a.replace("ecarx.intent.action.ECARX_KEY_", "")
+                        + " — меню не на экране");
+                return;
+            }
             if (KEY_UP.equals(a)) move(-1);
             else if (KEY_DOWN.equals(a)) move(1);
             else if (KEY_OK.equals(a)) pick();
@@ -252,14 +270,13 @@ final class ClusterMenu {
 
     /** On the main thread. {@code forMs} > 0: hide by itself after that long. */
     private void show(long forMs) {
-        if (!on(c)) return;
-        if (forMs == 0 && NaviListener.guiding()) {
-            DebugLog.i(TAG, "the Navigator leads a route: its map stays");
+        if (!on(c)) {
+            Journal.add(c, "меню выключено в приложении");
             return;
         }
         if (!granted(c)) {
             state = "нет разрешения показывать поверх окон";
-            DebugLog.w(TAG, "no overlay permission");
+            Journal.add(c, "меню: нет разрешения показывать поверх окон");
             return;
         }
         int gen = ++generation;
@@ -268,16 +285,20 @@ final class ClusterMenu {
             try {
                 r = source.rows();
             } catch (RuntimeException e) {
-                DebugLog.w(TAG, "rows: " + e);
+                Journal.add(c, "меню: строки не собрались: " + Errors.text(e));
                 return;
             }
             main.post(() -> {
-                if (gen != generation) return;
+                if (gen != generation) {
+                    Journal.add(c, "меню: вкладку сменили, пока собирался список");
+                    return;
+                }
                 rows = r;
                 selected = 0;
                 first = 0;
                 if (!attach()) return;
                 draw();
+                Journal.add(c, "меню показано: строк " + r.size() + (forMs > 0 ? " (проба)" : ""));
                 if (forMs > 0) main.postDelayed(() -> {
                     if (gen == generation) hide();
                 }, forMs);
@@ -347,9 +368,10 @@ final class ClusterMenu {
     private void pick() {
         if (selected >= rows.size()) return;
         Suggestion s = rows.get(selected);
-        hide();
-        DebugLog.i(TAG, "chosen: " + s.kind);
-        RouteService.choose(c, s);
+        // The list stays: gone, it left the tab's empty panel behind (seen in the car, v0.6.0).
+        boolean ok = RouteService.choose(c, s);
+        Journal.add(c, "меню: выбрана строка " + (selected + 1) + " (" + s.kind
+                + (s.hasGeo() ? ", координаты" : ", поиск") + ")" + (ok ? "" : " — Навигатор не открылся"));
     }
 
     private boolean attach() {
@@ -398,7 +420,7 @@ final class ClusterMenu {
             wm.addView(view, lp);
         } catch (RuntimeException e) {
             state = "окно не открылось: " + Errors.text(e);
-            DebugLog.w(TAG, "overlay: " + e);
+            Journal.add(c, "меню: " + state);
             view = null;
             list = null;
             return false;

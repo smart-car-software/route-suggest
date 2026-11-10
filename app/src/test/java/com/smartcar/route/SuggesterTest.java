@@ -119,6 +119,26 @@ public class SuggesterTest {
     }
 
     @Test
+    public void routeToTheNavigatorsPointNotWhereTheCarStopped() {
+        // Parked on the far side of the building, ~120 m from the entrance the Navigator had.
+        double[] parked = {CAFE[0] + 0.0011, CAFE[1]};
+        List<Trip> trips = new ArrayList<>();
+        for (int d = 1; d <= 3; d++) trips.add(trip(at(11, d, 12, 0), HOME, parked));
+        trips.set(2, trips.get(2).withNaviName("Кафе Ромашка").withDest(CAFE[0], CAFE[1]));
+        List<Suggestion> s = Suggester.menu(input(at(11, 10, 17, 45), HOME, trips, YANDEX));
+        Suggestion cafe = null;
+        for (Suggestion x : s) if (x.row.equals("Кафе Ромашка")) cafe = x;
+        assertEquals(CAFE[0], cafe.lat, 1e-9);
+        assertEquals(CAFE[1], cafe.lon, 1e-9);
+        // A bookmark there wins: Yandex's own point.
+        List<Place> places = new ArrayList<>(YANDEX);
+        places.add(new Place(Place.Kind.BOOKMARK, "Ромашка", "", CAFE[0] + 0.0005, CAFE[1]));
+        Suggestion b = Suggester.menu(input(at(11, 10, 17, 45), HOME, trips, places)).get(1);
+        assertEquals("Ромашка", b.row);
+        assertEquals(CAFE[0] + 0.0005, b.lat, 1e-9);
+    }
+
+    @Test
     public void cardOnlyForAnEventOrARoutine() {
         List<Trip> trips = Arrays.asList(trip(at(10, 20, 18, 5), HOME, GYM),
                 trip(at(10, 27, 17, 50), HOME, GYM), trip(at(11, 3, 18, 20), HOME, GYM));
