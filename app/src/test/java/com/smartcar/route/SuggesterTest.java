@@ -180,6 +180,11 @@ public class SuggesterTest {
         assertFalse(Suggester.sameAddress("ул. Рихарда Зорге, 66", "улица Рихарда Зорге, 6"));
         assertFalse(Suggester.sameAddress("ул. Рихарда Зорге, 66", "улица Рихарда Зорге, 66А"));
         assertFalse(Suggester.sameAddress("Казань", "Казань"));
+        assertFalse(Suggester.sameAddress("Казань, ул. Баумана, 15", "улица Баумана 1"));
+        assertFalse(Suggester.sameAddress("Республика Татарстан, Казань, улица Рихарда Зорге, 66",
+                "улица Рихарда Зорге 6"));
+        assertTrue(Suggester.sameAddress("Республика Татарстан, Казань, улица Рихарда Зорге, 66",
+                "улица Рихарда Зорге 66"));
         // A drive the Navigator kept as an address: the organisation bookmark gets it.
         List<Place> places = new ArrayList<>(YANDEX);
         places.add(new Place(Place.Kind.BOOKMARK, "Ice Power fitness", "ул. Рихарда Зорге, 66",

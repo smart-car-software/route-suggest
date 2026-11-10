@@ -240,8 +240,9 @@ final class Suggester {
     static boolean sameAddress(String place, String drive) {
         String a = normAddress(place), b = normAddress(drive);
         if (a.isEmpty() || b.isEmpty() || !a.matches(".*\\d.*")) return false;
-        return a.endsWith(b) || b.endsWith(a) || a.contains(" " + b) || b.contains(" " + a)
-                || a.equals(b);
+        // Whole words only: «… 15» does not hold «… 1» (a city in front made it so, emulator).
+        String pa = " " + a + " ", pb = " " + b + " ";
+        return pa.contains(pb) || pb.contains(pa);
     }
 
     /** One more place for the menu, with how many drives ended there. */
