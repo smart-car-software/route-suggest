@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="360 100 1200 620" width="1200" height="620" font-family="Roboto, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <!-- Copyright © 2026 smart-car-software. GPL-3.0-or-later.
+       Mock-up of the "where to?" list on the Geely Monjaro instrument cluster right after the
+       start, as Car Notification Service draws a list card (460 px wide, 288 px from the top of
+       the 1920×720 cluster). Not a screenshot: the places are made up and the gauges are a sketch. -->
+  <title>«Куда едем?» на приборке Monjaro</title>
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="60%" r="70%">
+      <stop offset="0" stop-color="#1B2633"/><stop offset="1" stop-color="#07090C"/>
+    </radialGradient>
+    <clipPath id="crop"><rect x="360" y="100" width="1200" height="620" rx="24"/></clipPath>
+  </defs>
+  <g clip-path="url(#crop)">
+    <rect x="360" y="100" width="1200" height="620" fill="url(#bg)"/>
+
+    <!-- Top bar -->
+    <text x="420" y="138" font-size="24" fill="#9AA4B0">+4 °C</text>
+    <text x="960" y="138" font-size="26" fill="#F2F5F8" text-anchor="middle">18:42</text>
+    <text x="1500" y="138" font-size="24" fill="#9AA4B0" text-anchor="end">12 480 км</text>
+    <rect x="760" y="154" width="400" height="3" rx="1.5" fill="#4FB7F0" opacity="0.8"/>
+
+    <!-- Speed -->
+    <path d="M410 560 A 170 170 0 1 1 690 560" fill="none" stroke="#2A3644" stroke-width="10" stroke-linecap="round"/>
+    <text x="550" y="470" font-size="110" font-weight="300" fill="#F2F5F8" text-anchor="middle">0</text>
+    <text x="550" y="512" font-size="26" fill="#7D8896" text-anchor="middle">км/ч</text>
+
+    <!-- Gear -->
+    <path d="M1230 560 A 170 170 0 1 1 1510 560" fill="none" stroke="#2A3644" stroke-width="10" stroke-linecap="round"/>
+    <text x="1370" y="470" font-size="110" font-weight="300" fill="#F2F5F8" text-anchor="middle">P</text>
+    <text x="1370" y="512" font-size="26" fill="#7D8896" text-anchor="middle" letter-spacing="10">P R N D</text>
+
+    <!-- The list card: five rows in view, the wheel's roller scrolls, ⏯ builds the route -->
+    <rect x="730" y="288" width="460" height="311" rx="10" fill="#283442" fill-opacity="0.85" stroke="#55657A" stroke-width="2"/>
+    <text x="960" y="331" font-size="26" fill="#F2F5F8" text-anchor="middle">Куда едем?</text>
+    <g font-size="24" fill="#F2F5F8">
+      <rect x="750" y="366" width="420" height="40" rx="8" fill="#4FB7F0" fill-opacity="0.35" stroke="#4FB7F0" stroke-width="2"/>
+      <text x="762" y="395">Ужин · 18:00</text>
+      <text x="762" y="437">Ice Power · по вторникам</text>
+      <text x="762" y="479">Работа · обычно в это время</text>
+      <text x="762" y="521">Фитнес</text>
+      <text x="762" y="563">Дача</text>
+    </g>
+    <text x="960" y="590" font-size="16" fill="#7D8896" text-anchor="middle">▼</text>
+  </g>
+</svg>
