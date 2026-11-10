@@ -85,6 +85,61 @@ public class SuggesterTest {
         assertEquals("На работу", morning.get(0).row);
     }
 
+    static final double[] CAFE = {55.700, 49.300};
+    static final double[] POOL = {55.710, 49.310};
+    static final double[] AUNT = {55.720, 49.320};
+
+    @Test
+    public void menuHasEveryPlaceByHowOftenDriven() {
+        List<Place> places = new ArrayList<>(YANDEX);
+        places.add(new Place(Place.Kind.BOOKMARK, "Кафе", "", CAFE[0], CAFE[1]));
+        places.add(new Place(Place.Kind.BOOKMARK, "Бассейн", "", POOL[0], POOL[1]));
+        places.add(new Place(Place.Kind.BOOKMARK, "Аптека", "Ленина 1", Double.NaN, Double.NaN));
+        List<Trip> trips = new ArrayList<>(Arrays.asList(trip(at(10, 20, 18, 5), HOME, GYM),
+                trip(at(10, 27, 17, 50), HOME, GYM), trip(at(11, 3, 18, 20), HOME, GYM)));
+        // Cafe once, the pool twice, work four times (mornings), the aunt (no bookmark) 3 times.
+        trips.add(trip(at(11, 1, 12, 0), HOME, CAFE));
+        trips.add(trip(at(11, 2, 12, 0), HOME, POOL));
+        trips.add(trip(at(11, 4, 12, 0), HOME, POOL));
+        for (int d = 2; d <= 5; d++) trips.add(trip(at(10, d, 8, 0), HOME, WORK));
+        for (int d = 6; d <= 8; d++) trips.add(trip(at(10, d, 13, 0), HOME, AUNT));
+
+        // Tuesday 17:45 at work: the gym is the routine, then home, then all the rest.
+        List<Suggestion> s = Suggester.menu(input(at(11, 10, 17, 45), WORK, trips, places));
+        assertEquals(Arrays.asList("Ice Power · по вторникам", "Домой", "Место в 8,2 км",
+                "Бассейн", "Кафе", "Аптека"), rows(s));
+        assertEquals("Ленина 1", s.get(5).query);
+        // At home: work comes in its place among the rest, by its four drives.
+        List<Suggestion> h = Suggester.menu(input(at(11, 10, 17, 45), HOME, trips, places));
+        assertEquals(Arrays.asList("Ice Power · по вторникам", "На работу", "Место в 16 км",
+                "Бассейн", "Кафе", "Аптека"), rows(h));
+        // The card at start keeps its own short list.
+        assertTrue(Suggester.suggest(input(at(11, 10, 17, 45), HOME, trips, places)).size()
+                <= Suggester.MAX_ROWS);
+    }
+
+    @Test
+    public void cardOnlyForAnEventOrARoutine() {
+        List<Trip> trips = Arrays.asList(trip(at(10, 20, 18, 5), HOME, GYM),
+                trip(at(10, 27, 17, 50), HOME, GYM), trip(at(11, 3, 18, 20), HOME, GYM));
+        assertTrue(Suggester.worthAsking(Suggester.suggest(input(at(11, 10, 17, 45), HOME, trips, YANDEX))));
+        // Wednesday: only «На работу» and the frequent gym — no card at start.
+        assertFalse(Suggester.worthAsking(Suggester.suggest(input(at(11, 11, 17, 45), HOME, trips, YANDEX))));
+        Suggester.Input in = input(at(11, 11, 17, 45), HOME, trips, YANDEX);
+        in.events = Collections.singletonList(new CalEvent("Ужин", at(11, 11, 18, 0),
+                at(11, 11, 20, 0), "", "", SHOP[0], SHOP[1]));
+        assertTrue(Suggester.worthAsking(Suggester.suggest(in)));
+    }
+
+    @Test
+    public void menuEventFirst() {
+        Suggester.Input in = input(at(11, 10, 17, 45), HOME, Collections.emptyList(), YANDEX);
+        in.events = Collections.singletonList(new CalEvent("Ужин", at(11, 10, 18, 0),
+                at(11, 10, 20, 0), "", "", SHOP[0], SHOP[1]));
+        assertEquals(Arrays.asList("Ужин · 18:00", "На работу", "Ice Power"),
+                rows(Suggester.menu(in)));
+    }
+
     @Test
     public void nothingToOfferThenHomeOrWork() {
         List<Trip> none = Collections.emptyList();

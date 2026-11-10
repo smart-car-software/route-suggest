@@ -62,6 +62,8 @@ import java.util.concurrent.Executors;
  */
 public final class RouteService extends Service {
     static final String ACTION_SUGGEST_NOW = "com.smartcar.route.SUGGEST_NOW";
+    static final String ACTION_MENU_TRIAL = "com.smartcar.route.MENU_TRIAL";
+    static final String ACTION_MENU_SWITCHED = "com.smartcar.route.MENU_SWITCHED";
     static final String PREFS = "route";
     static final String CARD_ID = "com.smartcar.route:suggest";
 
@@ -89,6 +91,7 @@ public final class RouteService extends Service {
     private volatile Location lastFix;
     private volatile long lastFixAt;
     private volatile boolean promptRunning;
+    private ClusterMenu menu;
 
     private final LocationListener listener = new LocationListener() {
         @Override
@@ -158,14 +161,31 @@ public final class RouteService extends Service {
         lm = (LocationManager) getSystemService(LOCATION_SERVICE);
         startLocation();
         registerReceiver(screen, new IntentFilter(Intent.ACTION_SCREEN_ON));
+        menu = new ClusterMenu(this, this::menuRows);
+        if (ClusterMenu.on(this)) menu.start();
         // Created at boot (BootReceiver) — the ignition — or by opening the app.
         armPrompt(false);
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        if (intent != null && ACTION_SUGGEST_NOW.equals(intent.getAction())) armPrompt(true);
+        String a = intent == null ? null : intent.getAction();
+        if (ACTION_SUGGEST_NOW.equals(a)) armPrompt(true);
+        else if (ACTION_MENU_TRIAL.equals(a)) menu.trial();
+        else if (ACTION_MENU_SWITCHED.equals(a)) {
+            if (ClusterMenu.on(this)) menu.start();
+            else menu.hideNow();
+        }
         return START_STICKY;
+    }
+
+    static void send(Context c, String action) {
+        Intent i = new Intent(c, RouteService.class).setAction(action);
+        try {
+            c.startForegroundService(i);
+        } catch (RuntimeException e) {
+            DebugLog.w(TAG, "cannot start: " + e);
+        }
     }
 
     @Override
@@ -176,6 +196,8 @@ public final class RouteService extends Service {
         } catch (IllegalArgumentException ignored) {
         }
         if (lm != null) lm.removeUpdates(listener);
+        if (menu != null) menu.stop();
+        calendar.shutdownNow();
         saveDetector();
         worker.shutdown();
         prompter.shutdownNow();
@@ -317,6 +339,7 @@ public final class RouteService extends Service {
             sleep(5_000);
         }
         events = withCoordinates(events);
+        keepEvents(events);
 
         if (!now && NaviListener.guiding()) {
             DebugLog.i(TAG, "the Navigator already leads a route: no question");
@@ -383,8 +406,46 @@ public final class RouteService extends Service {
                 android.provider.Settings.Global.BOOT_COUNT, -1);
     }
 
+    // ------------------------------------------------------------------ the menu on the cluster
+
+    /** The calendar as last read, for the menu: read again when older than this. */
+    static final long EVENTS_FRESH_MS = 10 * 60_000L;
+    private volatile List<CalEvent> lastEvents = Collections.emptyList();
+    private volatile long eventsAt;
+    private volatile boolean eventsReading;
+    private final ExecutorService calendar = Executors.newSingleThreadExecutor();
+
+    private void keepEvents(List<CalEvent> events) {
+        lastEvents = events;
+        eventsAt = System.currentTimeMillis();
+        if (menu != null) menu.update();
+    }
+
+    /** The menu's rows: at once from what is known, the calendar re-read behind when old. */
+    private List<Suggestion> menuRows() {
+        if (System.currentTimeMillis() - eventsAt > EVENTS_FRESH_MS && !eventsReading) {
+            eventsReading = true;
+            calendar.execute(() -> {
+                try {
+                    CalendarSync.Result r = CalendarSync.events(this, System.currentTimeMillis(),
+                            RouteApp.yandex(this).places());
+                    keepEvents(withCoordinates(r.events));
+                } catch (RuntimeException e) {
+                    DebugLog.w(TAG, "calendar for the menu: " + e);
+                } finally {
+                    eventsReading = false;
+                }
+            });
+        }
+        return Suggester.menu(input(lastEvents));
+    }
+
     /** What to offer now, from everything known. */
     List<Suggestion> suggestions(List<CalEvent> events) {
+        return Suggester.suggest(input(events));
+    }
+
+    private Suggester.Input input(List<CalEvent> events) {
         Suggester.Input in = new Suggester.Input();
         in.nowMs = System.currentTimeMillis();
         in.zone = ZoneId.systemDefault();
@@ -400,10 +461,26 @@ public final class RouteService extends Service {
         in.trips = NaviHistory.merge(TripStore.get(this).since(in.nowMs - Suggester.HISTORY_MS), navi);
         in.events = events;
         in.places = ya.places();
-        return Suggester.suggest(in);
+        return in;
+    }
+
+    /** The switch «Карточка при запуске» in the app (on unless turned off). */
+    static final String PREF_CARD = "card_at_start";
+
+    static boolean cardAtStart(Context c) {
+        return prefs(c).getBoolean(PREF_CARD, true);
     }
 
     private void show(List<Suggestion> list, boolean asked) {
+        if (!asked && !cardAtStart(this)) {
+            DebugLog.i(TAG, "the card at start is off");
+            return;
+        }
+        if (!asked && !Suggester.worthAsking(list)) {
+            // Home, work, the frequent places: in the menu on the cluster, no card for them.
+            DebugLog.i(TAG, "no event or routine: no card");
+            return;
+        }
         if (list.isEmpty()) {
             DebugLog.i(TAG, "nothing to offer");
             if (asked && NotifyClient.installed(this)) {
@@ -440,7 +517,11 @@ public final class RouteService extends Service {
     static boolean choose(Context c, int index) {
         List<Suggestion> offered = offered(c);
         if (index < 0 || index >= offered.size()) return false; // «Не сейчас»
-        Suggestion s = offered.get(index);
+        return choose(c, offered.get(index));
+    }
+
+    /** A row from the card or from the menu on the cluster. */
+    static boolean choose(Context c, Suggestion s) {
         try {
             prefs(c).edit().putString("chosen", new JSONObject().put("at", System.currentTimeMillis())
                     .put("s", s.toJson()).toString()).apply();

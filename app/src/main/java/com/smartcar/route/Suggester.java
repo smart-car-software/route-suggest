@@ -42,7 +42,7 @@ import java.util.Set;
  *   <li>the most visited places.</li>
  * </ol>
  * Nothing where the car already stands, and one row per place. Pure: everything comes in
- * {@link Input}.
+ * {@link Input}. The menu on the cluster ({@link #menu}) has the same head and every place after.
  */
 final class Suggester {
     /** Closer than this, the car is already there. */
@@ -102,6 +102,33 @@ final class Suggester {
     }
 
     static List<Suggestion> suggest(Input in) {
+        return build(in, false);
+    }
+
+    /**
+     * The menu on the cluster's navigation tab: the same rows in the same order — events,
+     * routines, home or work — and then every place there is, Yandex bookmarks and places the
+     * car goes to often, the most driven to first. No limit of {@link #MAX_ROWS}.
+     */
+    static List<Suggestion> menu(Input in) {
+        return build(in, true);
+    }
+
+    static final int MENU_MAX_ROWS = 60;
+
+    /**
+     * Whether the card at start is worth showing on its own: only for something the driver did
+     * not tell us to look up — a calendar event or a routine. Home, work and the frequent places
+     * alone are always there and stay in the menu.
+     */
+    static boolean worthAsking(List<Suggestion> rows) {
+        for (Suggestion s : rows) {
+            if (s.kind == Suggestion.Kind.EVENT || s.kind == Suggestion.Kind.ROUTINE) return true;
+        }
+        return false;
+    }
+
+    private static List<Suggestion> build(Input in, boolean menu) {
         boolean located = Geo.valid(in.hereLat, in.hereLon);
         List<Trip> recent = new ArrayList<>();
         for (Trip t : in.trips) {
@@ -112,7 +139,7 @@ final class Suggester {
         Place home = homeOrLearned(in.places, clusters, in.zone);
         Place work = workOrLearned(in.places, clusters, home, in.zone);
 
-        Rows rows = new Rows(in);
+        Rows rows = new Rows(in, menu ? MENU_MAX_ROWS : MAX_ROWS);
         ZonedDateTime now = Instant.ofEpochMilli(in.nowMs).atZone(in.zone);
 
         List<CalEvent> events = new ArrayList<>(in.events);
@@ -156,6 +183,11 @@ final class Suggester {
             rows.add(Suggestion.Kind.HOME, "Домой", home.name, home.lat, home.lon, "");
         }
 
+        if (menu) {
+            everyPlace(rows, in, clusters, recent, home, work);
+            return rows.out;
+        }
+
         List<Cluster> frequent = new ArrayList<>();
         for (Cluster c : clusters) if (c.trips.size() >= FREQUENT_MIN) frequent.add(c);
         frequent.sort((a, b) -> Integer.compare(b.trips.size(), a.trips.size()));
@@ -171,18 +203,86 @@ final class Suggester {
         return rows.out;
     }
 
-    /** The rows so far: at most {@link #MAX_ROWS}, none where the car is, one per place. */
+    /** One more place for the menu, with how many drives ended there. */
+    private static final class Candidate {
+        final Suggestion.Kind kind;
+        final String label;
+        final String name;
+        final double lat;
+        final double lon;
+        final String query;
+        final int visits;
+
+        Candidate(Suggestion.Kind kind, String label, String name, double lat, double lon,
+                  String query, int visits) {
+            this.kind = kind;
+            this.label = label;
+            this.name = name;
+            this.lat = lat;
+            this.lon = lon;
+            this.query = query;
+            this.visits = visits;
+        }
+    }
+
+    /**
+     * The menu's tail: home, work and the Yandex bookmarks, and the places with
+     * {@value #FREQUENT_MIN}+ drives that no bookmark covers — by the drives that ended there
+     * (within {@link #SAME_M}), then by name. Bookmarks never driven to come last.
+     */
+    private static void everyPlace(Rows rows, Input in, List<Cluster> clusters, List<Trip> recent,
+                                   Place home, Place work) {
+        List<Candidate> all = new ArrayList<>();
+        List<Place> known = new ArrayList<>();
+        if (home != null) known.add(home);
+        if (work != null) known.add(work);
+        for (Place p : in.places) {
+            if (p.kind == Place.Kind.BOOKMARK && !p.name.trim().isEmpty()) known.add(p);
+        }
+        for (Place p : known) {
+            int visits = 0;
+            if (p.hasGeo()) {
+                for (Trip t : recent) {
+                    if (p.metersTo(t.endLat, t.endLon) <= SAME_M) visits++;
+                }
+            }
+            Suggestion.Kind kind = p.kind == Place.Kind.HOME ? Suggestion.Kind.HOME
+                    : p.kind == Place.Kind.WORK ? Suggestion.Kind.WORK : Suggestion.Kind.FREQUENT;
+            String label = p.kind == Place.Kind.HOME ? "Домой"
+                    : p.kind == Place.Kind.WORK ? "На работу" : clip(p.name, LABEL);
+            all.add(new Candidate(kind, label, p.name, p.lat, p.lon,
+                    p.hasGeo() ? "" : (p.address.isEmpty() ? p.name : p.address), visits));
+        }
+        for (Cluster c : clusters) {
+            if (c.trips.size() < FREQUENT_MIN) continue;
+            boolean covered = false;
+            for (Place p : known) {
+                if (p.metersTo(c.lat, c.lon) <= SAME_M) covered = true;
+            }
+            if (covered) continue;
+            String label = c.name != null ? c.name : unnamed(c, in);
+            all.add(new Candidate(Suggestion.Kind.FREQUENT, clip(label, LABEL),
+                    c.name == null ? "" : c.name, c.lat, c.lon, "", c.trips.size()));
+        }
+        all.sort((a, b) -> a.visits != b.visits ? Integer.compare(b.visits, a.visits)
+                : a.label.compareToIgnoreCase(b.label));
+        for (Candidate c : all) rows.add(c.kind, c.label, c.name, c.lat, c.lon, c.query);
+    }
+
+    /** The rows so far: at most {@code max}, none where the car is, one per place. */
     private static final class Rows {
         final Input in;
+        final int max;
         final List<Suggestion> out = new ArrayList<>();
 
-        Rows(Input in) {
+        Rows(Input in, int max) {
             this.in = in;
+            this.max = max;
         }
 
         boolean add(Suggestion.Kind kind, String row, String name, double lat, double lon,
                     String query) {
-            if (out.size() >= MAX_ROWS) return false;
+            if (out.size() >= max) return false;
             if (Geo.valid(lat, lon)) {
                 if (Geo.valid(in.hereLat, in.hereLon)
                         && Geo.meters(lat, lon, in.hereLat, in.hereLon) <= AT_M) {

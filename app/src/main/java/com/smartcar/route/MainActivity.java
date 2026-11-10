@@ -63,6 +63,10 @@ public final class MainActivity extends Activity {
     private Button naviHistory;
     private Button autoGo;
     private Button autoGoGrant;
+    private Button card;
+    private Button menu;
+    private Button menuGrant;
+    private Button menuTrial;
     private volatile YandexAccount.Login login;
 
     static void showSuggestions(Context c) {
@@ -116,6 +120,25 @@ public final class MainActivity extends Activity {
         grantLocation = button(getString(R.string.grant_location), v -> requestPermissions(
                 new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 1));
         root.addView(grantLocation, 2);
+        card = button("", v -> {
+            RouteService.prefs(this).edit().putBoolean(RouteService.PREF_CARD,
+                    !RouteService.cardAtStart(this)).apply();
+            refresh();
+        });
+        root.addView(card);
+        root.addView(hint(getString(R.string.card_hint)));
+        menu = button("", v -> {
+            RouteService.prefs(this).edit().putBoolean(ClusterMenu.PREF, !ClusterMenu.on(this)).apply();
+            RouteService.send(this, RouteService.ACTION_MENU_SWITCHED);
+            refresh();
+        });
+        root.addView(menu);
+        menuGrant = button(getString(R.string.menu_grant), v -> grantMenu());
+        root.addView(menuGrant);
+        menuTrial = button(getString(R.string.menu_trial),
+                v -> RouteService.send(this, RouteService.ACTION_MENU_TRIAL));
+        root.addView(menuTrial);
+        root.addView(hint(getString(R.string.menu_hint)));
         autoGo = button("", v -> {
             RouteService.prefs(this).edit().putBoolean(AutoGoService.PREF, !AutoGoService.on(this)).apply();
             refresh();
@@ -221,6 +244,12 @@ public final class MainActivity extends Activity {
                 drawCalendars(accounts);
                 naviHistory.setText(NaviReader.enabled(this) ? R.string.navi_history_off
                         : R.string.navi_history_on);
+                card.setText(RouteService.cardAtStart(this) ? R.string.card_on : R.string.card_off);
+                menu.setText(ClusterMenu.on(this) ? R.string.menu_on : R.string.menu_off);
+                menuGrant.setVisibility(ClusterMenu.on(this) && !ClusterMenu.granted(this)
+                        ? View.VISIBLE : View.GONE);
+                menuTrial.setVisibility(ClusterMenu.on(this) && ClusterMenu.granted(this)
+                        ? View.VISIBLE : View.GONE);
                 autoGo.setText(AutoGoService.on(this) ? R.string.autogo_on : R.string.autogo_off);
                 autoGoGrant.setVisibility(AutoGoService.on(this) && !AutoGoService.granted(this)
                         ? View.VISIBLE : View.GONE);
@@ -268,6 +297,10 @@ public final class MainActivity extends Activity {
                     at > 0 ? DateUtils.getRelativeTimeSpanString(at).toString() : "—"),
                     getString(R.string.st_navi_history_err, err));
         }
+        if (!ClusterMenu.on(this)) line(sb, false, "", getString(R.string.st_menu_off));
+        else line(sb, ClusterMenu.granted(this), getString(R.string.st_menu_ok,
+                        ClusterMenu.state.isEmpty() ? "—" : ClusterMenu.state),
+                getString(R.string.st_menu_missing));
         if (!AutoGoService.on(this)) line(sb, false, "", getString(R.string.st_autogo_off));
         else line(sb, AutoGoService.granted(this), getString(R.string.st_autogo_ok),
                 getString(R.string.st_autogo_missing));
@@ -298,6 +331,35 @@ public final class MainActivity extends Activity {
                         status.setText(R.string.grant_navi_failed);
                     }
                 }
+                status.postDelayed(this::refresh, 1500);
+            });
+        });
+    }
+
+    /** «Поверх окон»: as root through the unit's adb, else Android's own screen. */
+    private void grantMenu() {
+        menuGrant.setEnabled(false);
+        worker.execute(() -> {
+            boolean done;
+            try {
+                ClusterMenu.grantAsRoot(this);
+                done = true;
+            } catch (IOException e) {
+                DebugLog.w("Menu", "as root: " + Errors.text(e));
+                done = false;
+            }
+            final boolean ok = done;
+            main.post(() -> {
+                menuGrant.setEnabled(true);
+                if (!ok) {
+                    try {
+                        startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                android.net.Uri.parse("package:" + getPackageName())));
+                    } catch (RuntimeException e) {
+                        status.setText(R.string.grant_navi_failed);
+                    }
+                }
+                RouteService.send(this, RouteService.ACTION_MENU_SWITCHED);
                 status.postDelayed(this::refresh, 1500);
             });
         });
