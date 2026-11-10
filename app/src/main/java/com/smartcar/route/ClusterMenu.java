@@ -369,9 +369,11 @@ final class ClusterMenu {
         if (selected >= rows.size()) return;
         Suggestion s = rows.get(selected);
         // The list stays: gone, it left the tab's empty panel behind (seen in the car, v0.6.0).
+        String how = Navigator.viaAlice(s, Navigator.online(c)) ? "Алиса"
+                : s.hasGeo() || Navigator.latLon(s.query) != null ? "координаты" : "поиск";
         boolean ok = RouteService.choose(c, s);
-        Journal.add(c, "меню: выбрана строка " + (selected + 1) + " (" + s.kind
-                + (s.hasGeo() ? ", координаты" : ", поиск") + ")" + (ok ? "" : " — Навигатор не открылся"));
+        Journal.add(c, "меню: выбрана строка " + (selected + 1) + " (" + s.kind + ", " + how + ")"
+                + (ok ? "" : " — Навигатор не открылся"));
     }
 
     private boolean attach() {

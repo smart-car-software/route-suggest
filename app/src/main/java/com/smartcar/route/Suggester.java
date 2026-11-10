@@ -242,24 +242,43 @@ final class Suggester {
         for (Place p : in.places) {
             if (p.kind == Place.Kind.BOOKMARK && !p.name.trim().isEmpty()) known.add(p);
         }
+        Set<Cluster> named = new HashSet<>();
         for (Place p : known) {
-            int visits = 0;
-            if (p.hasGeo()) {
-                for (Trip t : recent) {
-                    if (p.metersTo(t.endLat, t.endLon) <= SAME_M) visits++;
-                }
-            }
             Suggestion.Kind kind = p.kind == Place.Kind.HOME ? Suggestion.Kind.HOME
                     : p.kind == Place.Kind.WORK ? Suggestion.Kind.WORK : Suggestion.Kind.FREQUENT;
             String label = p.kind == Place.Kind.HOME ? "Домой"
                     : p.kind == Place.Kind.WORK ? "На работу" : clip(p.name, LABEL);
-            // No coordinates (an organisation bookmark): Alice finds it by its name and address.
+            if (p.hasGeo()) {
+                int visits = 0;
+                for (Trip t : recent) if (p.metersTo(t.endLat, t.endLon) <= SAME_M) visits++;
+                all.add(new Candidate(kind, label, p.name, p.lat, p.lon, "", visits));
+                continue;
+            }
+            // No point (an organisation bookmark): the place drives went to under its name (the
+            // row chosen, the Navigator's title) gives the visits — and the Navigator's own point
+            // for it, if it led there; else Alice finds it by its name and address.
+            Cluster same = null;
+            for (Cluster c : clusters) {
+                if (c.name != null && c.name.trim().equalsIgnoreCase(p.name.trim())
+                        && (same == null || c.trips.size() > same.trips.size())) {
+                    same = c;
+                }
+            }
             String text = p.address.isEmpty() || p.address.contains(p.name) ? (p.address.isEmpty()
                     ? p.name : p.address) : p.name + ", " + p.address;
-            all.add(new Candidate(kind, label, p.name, p.lat, p.lon, p.hasGeo() ? "" : text, visits));
+            if (same == null) {
+                all.add(new Candidate(kind, label, p.name, Double.NaN, Double.NaN, text, 0));
+                continue;
+            }
+            named.add(same);
+            boolean navi = false;
+            for (Trip t : same.trips) if (t.hasDest()) navi = true;
+            double[] at = point(same, in.places);
+            all.add(navi ? new Candidate(kind, label, p.name, at[0], at[1], "", same.trips.size())
+                    : new Candidate(kind, label, p.name, Double.NaN, Double.NaN, text, same.trips.size()));
         }
         for (Cluster c : clusters) {
-            if (c.trips.size() < FREQUENT_MIN) continue;
+            if (c.trips.size() < FREQUENT_MIN || named.contains(c)) continue;
             boolean covered = false;
             for (Place p : known) {
                 if (p.metersTo(c.lat, c.lon) <= SAME_M) covered = true;

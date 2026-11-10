@@ -91,6 +91,7 @@ public final class RouteService extends Service {
     private volatile Location lastFix;
     private volatile long lastFixAt;
     private volatile boolean promptRunning;
+    private volatile boolean destroyed;
     private ClusterMenu menu;
 
     private final LocationListener listener = new LocationListener() {
@@ -192,6 +193,7 @@ public final class RouteService extends Service {
     @Override
     public void onDestroy() {
         started = false;
+        destroyed = true;
         try {
             unregisterReceiver(screen);
         } catch (IllegalArgumentException ignored) {
@@ -313,8 +315,10 @@ public final class RouteService extends Service {
     private void runPrompt(boolean now, long armedAt, long armedFix) {
         // A fix newer than the arming: after a sleep the last one is from where the car was.
         while (!now && lastFixAt <= armedFix && System.currentTimeMillis() - armedAt < WAIT_FIX_MS) {
+            if (gone()) return;
             sleep(1_000);
         }
+        if (gone()) return;
         readNavi();
         YandexAccount ya = RouteApp.yandex(this);
         if (ya.loggedIn() && System.currentTimeMillis() - ya.syncedMs() > YANDEX_SYNC_MS) {
@@ -335,13 +339,15 @@ public final class RouteService extends Service {
             CalendarSync.Result r = CalendarSync.events(this, System.currentTimeMillis(), ya.places());
             events = r.events;
             if (r.networkFailures == 0 || now || online()
-                    || System.currentTimeMillis() - netFrom > WAIT_NET_MS) {
+                    || System.currentTimeMillis() - netFrom > WAIT_NET_MS || gone()) {
                 break;
             }
             sleep(5_000);
         }
+        if (gone()) return;
         events = withCoordinates(events);
         keepEvents(events);
+        if (gone()) return;
 
         if (!now && NaviListener.guiding()) {
             Journal.add(this, "запуск: Навигатор уже ведёт по маршруту — без карточки");
@@ -354,7 +360,18 @@ public final class RouteService extends Service {
         List<Suggestion> list = suggestions(events);
         prefs(this).edit().putLong("prompt_at", System.currentTimeMillis())
                 .putInt("prompt_boot", bootCount()).apply();
-        main.post(() -> show(list, now));
+        main.post(() -> {
+            if (!destroyed) show(list, now);
+        });
+    }
+
+    /**
+     * This service was destroyed (stopped and started again — after the location permission):
+     * its question is dropped, the new one asks. A sleep interrupted by the shutdown only sets
+     * the flag, so the loops would spin through their waits and ask twice (emulator, v0.6.1).
+     */
+    private boolean gone() {
+        return destroyed || Thread.currentThread().isInterrupted();
     }
 
     /**
@@ -378,8 +395,14 @@ public final class RouteService extends Service {
                 String[] p = hit.split(",");
                 geo = new double[]{Double.parseDouble(p[0]), Double.parseDouble(p[1])};
             } else {
-                geo = Geocode.forward(e.location, here == null ? Double.NaN : here.getLatitude(),
-                        here == null ? Double.NaN : here.getLongitude());
+                double hLat = here == null ? Double.NaN : here.getLatitude();
+                double hLon = here == null ? Double.NaN : here.getLongitude();
+                geo = Geocode.forward(e.location, hLat, hLon);
+                String bare = geo == null ? Geocode.withoutName(e.location) : null;
+                if (bare != null) {
+                    sleep(1_000); // Nominatim's policy: a request a second at most
+                    geo = Geocode.forward(bare, hLat, hLon);
+                }
                 // A miss is not kept: it may be the network, not the address.
                 if (geo != null) cache.edit().putString(key, geo[0] + "," + geo[1]).apply();
             }

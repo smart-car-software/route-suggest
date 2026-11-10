@@ -77,6 +77,21 @@ final class Geocode {
         }
     }
 
+    /**
+     * «Ice Power, Казань, улица Рихарда Зорге, 66» → «Казань, улица Рихарда Зорге, 66»: Nominatim
+     * finds nothing with a name in front (seen on the emulator). Null when the first part looks
+     * like an address already (has a digit) or there is nothing after it. Pure.
+     */
+    static String withoutName(String query) {
+        String q = query == null ? "" : query.trim();
+        int comma = q.indexOf(',');
+        if (comma <= 0) return null;
+        String first = q.substring(0, comma);
+        String rest = q.substring(comma + 1).trim();
+        if (rest.isEmpty() || first.matches(".*\\d.*") || !rest.matches(".*\\d.*")) return null;
+        return rest;
+    }
+
     /** The result nearest (lat, lon) within {@link #MAX_FORWARD_M}; without a fix — the first. Pure. */
     static double[] nearest(String json, double lat, double lon) {
         try {

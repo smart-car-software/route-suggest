@@ -139,6 +139,23 @@ public class SuggesterTest {
     }
 
     @Test
+    public void organisationBookmarkCountsTheDrivesUnderItsName() {
+        List<Place> places = new ArrayList<>(YANDEX);
+        places.add(new Place(Place.Kind.BOOKMARK, "Ромашка", "Баумана 5", Double.NaN, Double.NaN));
+        places.add(new Place(Place.Kind.BOOKMARK, "Аптека", "", CAFE[0] + 0.05, CAFE[1]));
+        List<Trip> trips = new ArrayList<>();
+        for (int d = 1; d <= 2; d++) {
+            trips.add(trip(at(11, d, 12, 0), HOME, POOL).withNaviName("Ромашка")
+                    .withDest(POOL[0] + 0.0005, POOL[1]));
+        }
+        List<Suggestion> s = Suggester.menu(input(at(11, 10, 17, 45), HOME, trips, places));
+        // Two drives: above the bookmarks never driven to, with the Navigator's point.
+        assertEquals(Arrays.asList("На работу", "Ромашка", "Ice Power", "Аптека"), rows(s));
+        assertEquals(POOL[0] + 0.0005, s.get(1).lat, 1e-9);
+        assertEquals("", s.get(1).query);
+    }
+
+    @Test
     public void geocodedEventGoesByItsText() {
         Suggester.Input in = input(at(11, 10, 17, 45), HOME, Collections.emptyList(), YANDEX);
         in.events = Arrays.asList(

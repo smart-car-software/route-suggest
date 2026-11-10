@@ -309,9 +309,10 @@ public final class MainActivity extends Activity {
                     getString(R.string.st_navi_history_err, err));
         }
         if (!ClusterMenu.on(this)) line(sb, false, "", getString(R.string.st_menu_off));
-        else line(sb, ClusterMenu.granted(this), getString(R.string.st_menu_ok,
-                        ClusterMenu.state.isEmpty() ? "—" : ClusterMenu.state),
-                getString(R.string.st_menu_missing));
+        else if (!ClusterMenu.granted(this)) line(sb, false, "", getString(R.string.st_menu_missing));
+        else line(sb, ClusterMenu.state.startsWith("подключено"), getString(R.string.st_menu_ok,
+                        ClusterMenu.state), getString(R.string.st_menu_ok,
+                        ClusterMenu.state.isEmpty() ? "—" : ClusterMenu.state));
         if (!AutoGoService.on(this)) line(sb, false, "", getString(R.string.st_autogo_off));
         else line(sb, AutoGoService.granted(this), getString(R.string.st_autogo_ok),
                 getString(R.string.st_autogo_missing));

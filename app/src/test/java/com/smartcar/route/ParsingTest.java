@@ -38,6 +38,17 @@ public class ParsingTest {
     }
 
     @Test
+    public void addressWithoutTheNameInFront() {
+        assertEquals("Казань, улица Рихарда Зорге, 66",
+                Geocode.withoutName("Ice Power, Казань, улица Рихарда Зорге, 66"));
+        // A city in front goes too: only tried when the whole text found nothing, near the car.
+        assertEquals("улица Баумана, 82", Geocode.withoutName("Казань, улица Баумана, 82"));
+        assertEquals(null, Geocode.withoutName("улица Баумана 82, Казань"));
+        assertEquals(null, Geocode.withoutName("Кафе Ромашка"));
+        assertEquals(null, Geocode.withoutName("Офис, переговорная"));
+    }
+
+    @Test
     public void forwardGeocodeTakesTheNearest() {
         String json = "[{\"lat\":\"55.75\",\"lon\":\"37.61\",\"display_name\":\"Кремль, Москва\"},"
                 + "{\"lat\":\"55.7987\",\"lon\":\"49.1056\",\"display_name\":\"Кремль, Казань\"}]";
