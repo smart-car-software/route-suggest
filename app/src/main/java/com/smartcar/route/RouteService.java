@@ -589,8 +589,10 @@ public final class RouteService extends Service {
         boolean ok = Navigator.open(c, s);
         if (ok && alice && NaviReader.enabled(c)) {
             // Where Alice sent the Navigator: kept for this row, for a route without the network.
+            long at = System.currentTimeMillis();
+            Learned.chosen(c, at);
             Intent i = new Intent(c, RouteService.class).setAction(ACTION_LEARN)
-                    .putExtra("query", s.query).putExtra("at", System.currentTimeMillis());
+                    .putExtra("query", s.query).putExtra("at", at);
             try {
                 c.startForegroundService(i);
             } catch (RuntimeException e) {
@@ -604,30 +606,36 @@ public final class RouteService extends Service {
     private static final long[] LEARN_AFTER_MS = {60_000L, 180_000L};
 
     private void learnLater(String query, long at) {
-        for (long after : LEARN_AFTER_MS) {
+        for (int n = 0; n < LEARN_AFTER_MS.length; n++) {
+            boolean last = n == LEARN_AFTER_MS.length - 1;
             main.postDelayed(() -> {
-                if (!destroyed) worker.execute(() -> learn(query, at));
-            }, after);
+                if (!destroyed) worker.execute(() -> learn(query, at, last));
+            }, LEARN_AFTER_MS[n]);
         }
     }
 
-    private void learn(String query, long at) {
+    private void learn(String query, long at, boolean last) {
         if (destroyed || query == null || query.isEmpty()) return;
         if (Learned.load(this).containsKey(Learned.key(query))
                 && prefs(this).getLong("learned_at:" + Learned.key(query), 0) >= at) {
             return; // the first reading had it
         }
+        String when = new java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.ROOT)
+                .format(new java.util.Date(at));
         try {
-            double[] p = NaviReader.builtBetween(this, at, at + Learned.WINDOW_MS);
+            double[] p = NaviReader.builtBetween(this, at, Learned.windowEnd(at, Learned.choices(this)));
             if (p == null) {
-                Journal.add(this, "Алиса: точки маршрута в истории Навигатора пока нет");
+                Journal.add(this, "Алиса (выбор в " + when + "): маршрута в истории Навигатора "
+                        + (last ? "нет — точка не запомнена" : "пока нет"));
                 return;
             }
             Learned.put(this, query, p[0], p[1]);
             prefs(this).edit().putLong("learned_at:" + Learned.key(query), at).apply();
-            Journal.add(this, "Алиса: точка маршрута запомнена — без интернета маршрут пойдёт в неё");
+            Journal.add(this, "Алиса (выбор в " + when + "): точка маршрута запомнена — без интернета "
+                    + "маршрут пойдёт в неё");
         } catch (IOException e) {
-            Journal.add(this, "Алиса: история Навигатора не прочиталась: " + Errors.text(e));
+            Journal.add(this, "Алиса (выбор в " + when + "): история Навигатора не прочиталась: "
+                    + Errors.text(e));
         }
     }
 

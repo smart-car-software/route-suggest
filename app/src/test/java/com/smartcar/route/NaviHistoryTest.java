@@ -275,6 +275,19 @@ public class NaviHistoryTest {
     }
 
     @Test
+    public void theWindowEndsAtTheNextAliceChoice() {
+        long at = 1_000_000L;
+        assertEquals(at + Learned.WINDOW_MS, Learned.windowEnd(at, Arrays.asList(at - 5000L, at)));
+        assertEquals(at + 5000L, Learned.windowEnd(at, Arrays.asList(at, at + 5000L, at + 9000L)));
+        assertEquals(at + Learned.WINDOW_MS, Learned.windowEnd(at, Arrays.asList(at + Learned.WINDOW_MS + 1)));
+        // Dia's record after Library's later choice is not Library's (emulator).
+        List<byte[]> deltas = Arrays.asList(hex(D15), hex(D17), hex(D20));
+        long library = 1794161400000L, dia = 1794161500000L; // Kremlin's record comes after dia
+        assertEquals(null, NaviHistory.builtBetween(deltas, Collections.emptyList(), library,
+                Learned.windowEnd(library, Arrays.asList(library, dia))));
+    }
+
+    @Test
     public void wherePointedJustAfterAChoice() {
         // D15/D17: Pobedy Avenue at 21:07:20 and 21:07:28; D20: Kazan Kremlin at 21:11:44.
         List<byte[]> deltas = Arrays.asList(hex(D15), hex(D17), hex(D20));

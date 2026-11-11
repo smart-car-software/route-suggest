@@ -20,7 +20,9 @@ package com.smartcar.route;
 import android.content.Context;
 import android.content.SharedPreferences;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -36,6 +38,44 @@ final class Learned {
     static final long WINDOW_MS = 5 * 60_000L;
 
     private Learned() {
+    }
+
+    /**
+     * The end of the window for a choice made at {@code at}: {@link #WINDOW_MS} later, or the
+     * next choice by Alice, whichever is first — else a row whose route was never recorded took
+     * the next row's point (emulator). Pure.
+     */
+    static long windowEnd(long at, List<Long> aliceChoices) {
+        long end = at + WINDOW_MS;
+        for (long t : aliceChoices) if (t > at && t < end) end = t;
+        return end;
+    }
+
+    /** The times of the choices that went to Alice, the last few. */
+    static List<Long> choices(Context c) {
+        List<Long> out = new ArrayList<>();
+        for (String s : prefs(c).getString(CHOICES, "").split(",")) {
+            try {
+                if (!s.isEmpty()) out.add(Long.parseLong(s));
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return out;
+    }
+
+    static void chosen(Context c, long at) {
+        List<Long> all = choices(c);
+        all.add(at);
+        while (all.size() > 20) all.remove(0);
+        StringBuilder sb = new StringBuilder();
+        for (long t : all) sb.append(sb.length() > 0 ? "," : "").append(t);
+        prefs(c).edit().putString(CHOICES, sb.toString()).apply();
+    }
+
+    private static final String CHOICES = "alice_choices";
+
+    private static SharedPreferences prefs(Context c) {
+        return RouteService.prefs(c);
     }
 
     static String key(String query) {
