@@ -273,4 +273,22 @@ public class NaviHistoryTest {
         assertEquals(t + 5 * 60_000L, m.get(0).startMs);
         assertEquals(new ArrayList<>(), NaviHistory.merge(new ArrayList<>(), new ArrayList<>()));
     }
+
+    @Test
+    public void wherePointedJustAfterAChoice() {
+        // D15/D17: Pobedy Avenue at 21:07:20 and 21:07:28; D20: Kazan Kremlin at 21:11:44.
+        List<byte[]> deltas = Arrays.asList(hex(D15), hex(D17), hex(D20));
+        double[] kremlin = NaviHistory.builtBetween(deltas, Collections.emptyList(),
+                1794161500000L, 1794161600000L);
+        assertEquals(55.797557, kremlin[0], 1e-12);
+        assertEquals(49.107295, kremlin[1], 1e-12);
+        double[] pobedy = NaviHistory.builtBetween(deltas, Collections.emptyList(),
+                1794161230000L, 1794161300000L);
+        assertEquals(55.7512, pobedy[0], 1e-12);
+        assertEquals(null, NaviHistory.builtBetween(deltas, Collections.emptyList(),
+                1794161700000L, 1794161800000L));
+        // Only the unit's own deltas count, not the snapshot (the phone's routes).
+        assertEquals(null, NaviHistory.builtBetween(Collections.emptyList(), deltas,
+                1794161500000L, 1794161600000L));
+    }
 }

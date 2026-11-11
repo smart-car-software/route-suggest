@@ -83,6 +83,28 @@ final class NaviReader {
 
     /** Reads the Navigator's file and adds what is new; returns all the routes kept. */
     static synchronized List<NaviHistory.Route> read(Context c) throws IOException {
+        List<byte[]> deltas = new ArrayList<>(), others = new ArrayList<>();
+        load(c, deltas, others);
+        List<NaviHistory.Route> all = NaviHistory.accumulate(kept(c),
+                NaviHistory.routes(deltas, others, NaviListener.granted(c) ? guidanceStarts(c) : null), KEEP);
+        try {
+            prefs(c).edit().putString("routes", NaviHistory.toJson(all))
+                    .putLong("read_at", System.currentTimeMillis()).putString("error", "").apply();
+        } catch (JSONException e) {
+            throw new IOException(e);
+        }
+        DebugLog.i("Navi", "history read: " + deltas.size() + " deltas, " + all.size() + " routes kept");
+        return all;
+    }
+
+    /** Where the Navigator was sent between the two times ({@link NaviHistory#builtBetween}). */
+    static synchronized double[] builtBetween(Context c, long fromMs, long toMs) throws IOException {
+        List<byte[]> deltas = new ArrayList<>(), others = new ArrayList<>();
+        load(c, deltas, others);
+        return NaviHistory.builtBetween(deltas, others, fromMs, toMs);
+    }
+
+    private static void load(Context c, List<byte[]> deltas, List<byte[]> others) throws IOException {
         byte[][] files = copy(c);
         File tmp = new File(c.getCacheDir(), "navi-points.sqlite");
         File journal = new File(c.getCacheDir(), "navi-points.sqlite-journal");
@@ -96,7 +118,6 @@ final class NaviReader {
                 out.write(files[1]);
             }
         }
-        List<byte[]> deltas = new ArrayList<>(), others = new ArrayList<>();
         SQLiteDatabase sql = null;
         try {
             // Read-write on our own copy: a transaction the Navigator had not finished is rolled
@@ -121,16 +142,6 @@ final class NaviReader {
             //noinspection ResultOfMethodCallIgnored
             journal.delete();
         }
-        List<NaviHistory.Route> all = NaviHistory.accumulate(kept(c),
-                NaviHistory.routes(deltas, others, NaviListener.granted(c) ? guidanceStarts(c) : null), KEEP);
-        try {
-            prefs(c).edit().putString("routes", NaviHistory.toJson(all))
-                    .putLong("read_at", System.currentTimeMillis()).putString("error", "").apply();
-        } catch (JSONException e) {
-            throw new IOException(e);
-        }
-        DebugLog.i("Navi", "history read: " + deltas.size() + " deltas, " + all.size() + " routes kept");
-        return all;
     }
 
     private static final String SEPARATOR = "@@JOURNAL@@";

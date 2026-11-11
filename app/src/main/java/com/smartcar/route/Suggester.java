@@ -81,6 +81,13 @@ final class Suggester {
         List<CalEvent> events = Collections.emptyList();
         /** Yandex «Дом», «Работа» and bookmarks. */
         List<Place> places = Collections.emptyList();
+        /** {@link Learned}: Yandex's points for rows known by their text, by {@link Learned#key}. */
+        Map<String, double[]> learned = Collections.emptyMap();
+    }
+
+    private static double[] learned(Input in, String query) {
+        double[] p = query == null || query.isEmpty() ? null : in.learned.get(EventFilter.norm(query));
+        return p != null && Geo.valid(p[0], p[1]) ? p : null;
     }
 
     /** Trip ends close together: one place the car goes to. */
@@ -151,13 +158,16 @@ final class Suggester {
                     Instant.ofEpochMilli(e.startMs).atZone(in.zone));
             // Only a known place's name is remembered for the drive: «Ужин» is not a place.
             String name = e.place;
-            if (e.hasGeo()) {
-                // Our own geocoding is the middle of the house: the route goes by the text.
+            if (e.hasGeo() && !e.geocoded) {
                 rows.add(Suggestion.Kind.EVENT, clip(e.title, LABEL_WITH_SUFFIX) + " · " + when, name,
-                        e.lat, e.lon, e.geocoded ? e.location : "");
+                        e.lat, e.lon, "");
             } else if (!e.location.isEmpty()) {
+                // Our own geocoding is the middle of the house: the route goes by the text, and
+                // offline to Yandex's point from an earlier route, else to ours.
+                double[] at = learned(in, e.location);
+                if (at == null) at = new double[]{e.lat, e.lon};
                 rows.add(Suggestion.Kind.EVENT, clip(e.title, LABEL_WITH_SUFFIX) + " · " + when, name,
-                        Double.NaN, Double.NaN, e.location);
+                        at[0], at[1], e.location);
             }
         }
 
@@ -304,8 +314,11 @@ final class Suggester {
             }
             String text = p.address.isEmpty() || p.address.contains(p.name) ? (p.address.isEmpty()
                     ? p.name : p.address) : p.name + ", " + p.address;
+            double[] remembered = learned(in, text);
+            double kLat = remembered == null ? Double.NaN : remembered[0];
+            double kLon = remembered == null ? Double.NaN : remembered[1];
             if (same == null) {
-                all.add(new Candidate(kind, label, p.name, Double.NaN, Double.NaN, text, 0));
+                all.add(new Candidate(kind, label, p.name, kLat, kLon, text, 0));
                 continue;
             }
             named.add(same);
@@ -313,7 +326,7 @@ final class Suggester {
             for (Trip t : same.trips) if (t.hasDest()) navi = true;
             double[] at = point(same, in.places);
             all.add(navi ? new Candidate(kind, label, p.name, at[0], at[1], "", same.trips.size())
-                    : new Candidate(kind, label, p.name, Double.NaN, Double.NaN, text, same.trips.size()));
+                    : new Candidate(kind, label, p.name, kLat, kLon, text, same.trips.size()));
         }
         for (Cluster c : clusters) {
             if (c.trips.size() < FREQUENT_MIN || named.contains(c)) continue;

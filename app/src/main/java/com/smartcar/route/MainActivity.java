@@ -163,6 +163,7 @@ public final class MainActivity extends Activity {
                 .setMessage(R.string.clear_trips_q)
                 .setPositiveButton(R.string.clear, (d, w) -> worker.execute(() -> {
                     TripStore.get(this).clear();
+                    Learned.clear(this);
                     main.post(this::refresh);
                 }))
                 .setNegativeButton(R.string.cancel, null).show()));

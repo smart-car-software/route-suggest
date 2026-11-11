@@ -64,6 +64,7 @@ public final class RouteService extends Service {
     static final String ACTION_SUGGEST_NOW = "com.smartcar.route.SUGGEST_NOW";
     static final String ACTION_MENU_TRIAL = "com.smartcar.route.MENU_TRIAL";
     static final String ACTION_MENU_SWITCHED = "com.smartcar.route.MENU_SWITCHED";
+    static final String ACTION_LEARN = "com.smartcar.route.LEARN";
     static final String PREFS = "route";
     static final String CARD_ID = "com.smartcar.route:suggest";
 
@@ -172,6 +173,7 @@ public final class RouteService extends Service {
         String a = intent == null ? null : intent.getAction();
         if (ACTION_SUGGEST_NOW.equals(a)) armPrompt(true);
         else if (ACTION_MENU_TRIAL.equals(a)) menu.trial();
+        else if (ACTION_LEARN.equals(a)) learnLater(intent.getStringExtra("query"), intent.getLongExtra("at", 0));
         else if (ACTION_MENU_SWITCHED.equals(a)) {
             if (ClusterMenu.on(this)) menu.start();
             else menu.hideNow();
@@ -510,6 +512,7 @@ public final class RouteService extends Service {
         in.trips = NaviHistory.merge(TripStore.get(this).since(in.nowMs - Suggester.HISTORY_MS), navi);
         in.events = events;
         in.places = ya.places();
+        in.learned = Learned.load(this);
         return in;
     }
 
@@ -579,11 +582,53 @@ public final class RouteService extends Service {
         }
         // Arm before the Navigator comes up: its route overview is what AutoGoService waits for.
         // Alice leads by herself — nothing to press then.
-        if (!Navigator.viaAlice(s, Navigator.online(c))
-                && (s.hasGeo() || Navigator.latLon(s.query) != null)) {
+        boolean alice = Navigator.viaAlice(s, Navigator.online(c));
+        if (!alice && (s.hasGeo() || Navigator.latLon(s.query) != null)) {
             AutoGoService.arm(c);
         }
-        return Navigator.open(c, s);
+        boolean ok = Navigator.open(c, s);
+        if (ok && alice && NaviReader.enabled(c)) {
+            // Where Alice sent the Navigator: kept for this row, for a route without the network.
+            Intent i = new Intent(c, RouteService.class).setAction(ACTION_LEARN)
+                    .putExtra("query", s.query).putExtra("at", System.currentTimeMillis());
+            try {
+                c.startForegroundService(i);
+            } catch (RuntimeException e) {
+                DebugLog.w(TAG, "cannot start: " + e);
+            }
+        }
+        return ok;
+    }
+
+    /** Reads at 1 and 3 minutes: the Navigator's deltas go once it syncs. */
+    private static final long[] LEARN_AFTER_MS = {60_000L, 180_000L};
+
+    private void learnLater(String query, long at) {
+        for (long after : LEARN_AFTER_MS) {
+            main.postDelayed(() -> {
+                if (!destroyed) worker.execute(() -> learn(query, at));
+            }, after);
+        }
+    }
+
+    private void learn(String query, long at) {
+        if (destroyed || query == null || query.isEmpty()) return;
+        if (Learned.load(this).containsKey(Learned.key(query))
+                && prefs(this).getLong("learned_at:" + Learned.key(query), 0) >= at) {
+            return; // the first reading had it
+        }
+        try {
+            double[] p = NaviReader.builtBetween(this, at, at + Learned.WINDOW_MS);
+            if (p == null) {
+                Journal.add(this, "Алиса: точки маршрута в истории Навигатора пока нет");
+                return;
+            }
+            Learned.put(this, query, p[0], p[1]);
+            prefs(this).edit().putLong("learned_at:" + Learned.key(query), at).apply();
+            Journal.add(this, "Алиса: точка маршрута запомнена — без интернета маршрут пойдёт в неё");
+        } catch (IOException e) {
+            Journal.add(this, "Алиса: история Навигатора не прочиталась: " + Errors.text(e));
+        }
     }
 
     static List<Suggestion> offered(Context c) {

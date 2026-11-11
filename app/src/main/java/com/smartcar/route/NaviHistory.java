@@ -146,6 +146,40 @@ final class NaviHistory {
      *                       or null when that is not known (no notification access): then a
      *                       third delta stands for «Поехали»
      */
+    /**
+     * Where the Navigator was sent between {@code fromMs} and {@code toMs} (a record used then, by
+     * the on-unit deltas), the first — a later one may be the next row chosen; null if none. After
+     * a route by Alice this is Yandex's own point for the place she found — kept for that row, for
+     * a route without the network.
+     */
+    static double[] builtBetween(List<byte[]> deltas, List<byte[]> others, long fromMs, long toMs) {
+        Map<String, Point> known = new LinkedHashMap<>();
+        Map<String, Long> used = new HashMap<>();
+        List<byte[]> all = new ArrayList<>(deltas);
+        all.addAll(others);
+        for (int n = 0; n < all.size(); n++) {
+            boolean delta = n < deltas.size();
+            for (Point p : records(all.get(n))) {
+                Point k = known.computeIfAbsent(p.id, Point::new);
+                if (place(p.lat, p.lon)) {
+                    k.lat = p.lat;
+                    k.lon = p.lon;
+                }
+                if (delta && p.lastUsed >= fromMs && p.lastUsed <= toMs) used.merge(p.id, p.lastUsed, Math::min);
+            }
+        }
+        Point best = null;
+        long bestMs = Long.MAX_VALUE;
+        for (Map.Entry<String, Long> e : used.entrySet()) {
+            Point k = known.get(e.getKey());
+            if (k != null && place(k.lat, k.lon) && e.getValue() < bestMs) {
+                best = k;
+                bestMs = e.getValue();
+            }
+        }
+        return best == null ? null : new double[]{best.lat, best.lon};
+    }
+
     static List<Route> routes(List<byte[]> deltas, List<byte[]> others, List<Long> guidanceStarts) {
         Map<String, Point> known = new LinkedHashMap<>();
         Map<String, List<Long>> times = new HashMap<>();

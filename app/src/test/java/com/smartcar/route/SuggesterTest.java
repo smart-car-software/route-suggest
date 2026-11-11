@@ -201,6 +201,30 @@ public class SuggesterTest {
     }
 
     @Test
+    public void yandexPointFromAnEarlierAliceRouteForOffline() {
+        List<Place> places = new ArrayList<>(YANDEX);
+        places.add(new Place(Place.Kind.BOOKMARK, "Ромашка", "Баумана 5", Double.NaN, Double.NaN));
+        Suggester.Input in = input(at(11, 10, 17, 45), HOME, Collections.emptyList(), places);
+        in.events = Collections.singletonList(new CalEvent("Ужин", at(11, 10, 18, 0),
+                at(11, 10, 20, 0), "Кафе, Ленина 5", "", Double.NaN, Double.NaN).geocodedAt(SHOP[0], SHOP[1]));
+        java.util.Map<String, double[]> learned = new java.util.HashMap<>();
+        learned.put(EventFilter.norm("Ромашка, Баумана 5"), new double[]{CAFE[0], CAFE[1]});
+        learned.put(EventFilter.norm("Кафе, Ленина 5"), new double[]{POOL[0], POOL[1]});
+        in.learned = learned;
+        List<Suggestion> s = Suggester.menu(in);
+        // The event: Yandex's point instead of ours, the text kept for Alice.
+        assertEquals(POOL[0], s.get(0).lat, 1e-9);
+        assertEquals("Кафе, Ленина 5", s.get(0).query);
+        Suggestion romashka = null;
+        for (Suggestion x : s) if (x.row.equals("Ромашка")) romashka = x;
+        assertEquals(CAFE[0], romashka.lat, 1e-9);
+        assertEquals("Ромашка, Баумана 5", romashka.query);
+        // Online Alice, offline the point.
+        assertTrue(Navigator.viaAlice(romashka, true));
+        assertTrue(Navigator.candidates(romashka, false).get(0)[1].startsWith("yandexnavi://build_route_on_map"));
+    }
+
+    @Test
     public void geocodedEventGoesByItsText() {
         Suggester.Input in = input(at(11, 10, 17, 45), HOME, Collections.emptyList(), YANDEX);
         in.events = Arrays.asList(
