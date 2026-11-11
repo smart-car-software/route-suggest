@@ -42,16 +42,16 @@ final class Learned {
 
     /**
      * The end of the window for a choice made at {@code at}: {@link #WINDOW_MS} later, or the
-     * next choice by Alice, whichever is first — else a row whose route was never recorded took
+     * next choice of any row (by Alice or by coordinates), whichever is first — else a row whose route was never recorded took
      * the next row's point (emulator). Pure.
      */
-    static long windowEnd(long at, List<Long> aliceChoices) {
+    static long windowEnd(long at, List<Long> choices) {
         long end = at + WINDOW_MS;
-        for (long t : aliceChoices) if (t > at && t < end) end = t;
+        for (long t : choices) if (t > at && t < end) end = t;
         return end;
     }
 
-    /** The times of the choices that went to Alice, the last few. */
+    /** The times of the rows chosen (card and menu), the last few. */
     static List<Long> choices(Context c) {
         List<Long> out = new ArrayList<>();
         for (String s : prefs(c).getString(CHOICES, "").split(",")) {
@@ -72,7 +72,7 @@ final class Learned {
         prefs(c).edit().putString(CHOICES, sb.toString()).apply();
     }
 
-    private static final String CHOICES = "alice_choices";
+    private static final String CHOICES = "choices";
 
     private static SharedPreferences prefs(Context c) {
         return RouteService.prefs(c);

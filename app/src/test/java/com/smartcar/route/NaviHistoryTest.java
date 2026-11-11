@@ -280,7 +280,8 @@ public class NaviHistoryTest {
         assertEquals(at + Learned.WINDOW_MS, Learned.windowEnd(at, Arrays.asList(at - 5000L, at)));
         assertEquals(at + 5000L, Learned.windowEnd(at, Arrays.asList(at, at + 5000L, at + 9000L)));
         assertEquals(at + Learned.WINDOW_MS, Learned.windowEnd(at, Arrays.asList(at + Learned.WINDOW_MS + 1)));
-        // Dia's record after Library's later choice is not Library's (emulator).
+        // A record after the next choice — by Alice or by coordinates, every choice is kept — is
+        // not this row's (emulator: Dia's, then Ice Power's by coordinates).
         List<byte[]> deltas = Arrays.asList(hex(D15), hex(D17), hex(D20));
         long library = 1794161400000L, dia = 1794161500000L; // Kremlin's record comes after dia
         assertEquals(null, NaviHistory.builtBetween(deltas, Collections.emptyList(), library,

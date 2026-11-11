@@ -586,11 +586,13 @@ public final class RouteService extends Service {
         if (!alice && (s.hasGeo() || Navigator.latLon(s.query) != null)) {
             AutoGoService.arm(c);
         }
+        // Every choice ends the window of the one before: a row by coordinates right after Alice
+        // (the driver changed his mind) records its own point, not hers (emulator).
+        long at = System.currentTimeMillis();
+        Learned.chosen(c, at);
         boolean ok = Navigator.open(c, s);
         if (ok && alice && NaviReader.enabled(c)) {
             // Where Alice sent the Navigator: kept for this row, for a route without the network.
-            long at = System.currentTimeMillis();
-            Learned.chosen(c, at);
             Intent i = new Intent(c, RouteService.class).setAction(ACTION_LEARN)
                     .putExtra("query", s.query).putExtra("at", at);
             try {
