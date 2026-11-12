@@ -240,6 +240,21 @@ public class SuggesterTest {
     }
 
     @Test
+    public void aLaterCheckKnowsWhatWasOffered() {
+        Suggester.Input in = input(at(11, 10, 17, 45), HOME, Collections.emptyList(), YANDEX);
+        List<Suggestion> before = Suggester.suggest(in);
+        java.time.LocalDate day = java.time.LocalDate.of(2026, 11, 10);
+        assertTrue(Suggester.explicitKeys(before, day).isEmpty()); // «На работу» only
+        in.events = Collections.singletonList(new CalEvent("Ужин", at(11, 10, 18, 0),
+                at(11, 10, 20, 0), "", "", SHOP[0], SHOP[1]));
+        List<String> keys = Suggester.explicitKeys(Suggester.suggest(in), day);
+        assertEquals(Collections.singletonList("2026-11-10|EVENT|Ужин · 18:00"), keys);
+        // The next day the same row is new again.
+        assertFalse(keys.containsAll(Suggester.explicitKeys(Suggester.suggest(in),
+                java.time.LocalDate.of(2026, 11, 11))));
+    }
+
+    @Test
     public void cardOnlyForAnEventOrARoutine() {
         List<Trip> trips = Arrays.asList(trip(at(10, 20, 18, 5), HOME, GYM),
                 trip(at(10, 27, 17, 50), HOME, GYM), trip(at(11, 3, 18, 20), HOME, GYM));

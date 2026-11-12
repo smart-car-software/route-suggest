@@ -162,6 +162,7 @@ public final class RouteService extends Service {
         startLocation();
         registerReceiver(screen, new IntentFilter(Intent.ACTION_SCREEN_ON));
         restoreAutoGo();
+        main.postDelayed(recheckTick, RECHECK_MS);
         menu = new ClusterMenu(this, this::menuRows);
         if (ClusterMenu.on(this)) menu.start();
         // Created at boot (BootReceiver) — the ignition — or by opening the app.
@@ -199,6 +200,7 @@ public final class RouteService extends Service {
         } catch (IllegalArgumentException ignored) {
         }
         if (lm != null) lm.removeUpdates(listener);
+        main.removeCallbacks(recheckTick);
         if (menu != null) menu.stop();
         calendar.shutdownNow();
         saveDetector();
@@ -365,6 +367,85 @@ public final class RouteService extends Service {
         if (!now && failures > 0) lateCalendar(ya);
     }
 
+    /** While the unit is on: calendars and routines looked at again this often. */
+    static final long RECHECK_MS = 10 * 60_000L;
+
+    private final Runnable recheckTick = new Runnable() {
+        @Override
+        public void run() {
+            if (destroyed) return;
+            main.postDelayed(this, RECHECK_MS);
+            if (promptRunning) return;
+            promptRunning = true;
+            try {
+                prompter.execute(() -> {
+                    try {
+                        recheck();
+                    } catch (RuntimeException e) {
+                        DebugLog.w(TAG, "recheck: " + e);
+                    } finally {
+                        promptRunning = false;
+                    }
+                });
+            } catch (java.util.concurrent.RejectedExecutionException e) {
+                promptRunning = false;
+            }
+        }
+    };
+
+    /**
+     * Not only at the start: an event that came with a calendar sync, a routine whose time came
+     * while the unit is on (the user's requirement) — the card for what was not offered yet today.
+     * Not while the Navigator leads a route, nor within {@link #PROMPT_GAP_MS} of the last card.
+     */
+    private void recheck() {
+        if (gone() || !cardAtStart(this) || NaviListener.guiding()) return;
+        if (System.currentTimeMillis() - prefs(this).getLong("prompt_at", 0) < PROMPT_GAP_MS) return;
+        List<CalEvent> events = lastEvents;
+        if (online()) {
+            CalendarSync.Result r = CalendarSync.events(this, System.currentTimeMillis(),
+                    RouteApp.yandex(this).places());
+            if (r.networkFailures == 0 || !r.events.isEmpty()) {
+                events = withCoordinates(r.events);
+                keepEvents(events);
+            }
+        }
+        if (gone()) return;
+        List<Suggestion> list = suggestions(events);
+        if (!Suggester.worthAsking(list)) return;
+        main.post(() -> {
+            if (!destroyed) show(list, false, true);
+        });
+    }
+
+    /** The events and routines offered by a card today ({@link Suggester#explicitKeys}). */
+    private java.util.Set<String> offeredKeys() {
+        java.util.Set<String> out = new java.util.HashSet<>();
+        try {
+            JSONObject o = new JSONObject(prefs(this).getString("explicit", "{}"));
+            java.util.Iterator<String> it = o.keys();
+            while (it.hasNext()) out.add(it.next());
+        } catch (JSONException ignored) {
+        }
+        return out;
+    }
+
+    private void markOffered(List<String> keys) {
+        try {
+            JSONObject o = new JSONObject(prefs(this).getString("explicit", "{}"));
+            long now = System.currentTimeMillis();
+            JSONObject kept = new JSONObject();
+            java.util.Iterator<String> it = o.keys();
+            while (it.hasNext()) {
+                String k = it.next();
+                if (now - o.optLong(k) < 2 * Suggester.DAY_MS) kept.put(k, o.optLong(k));
+            }
+            for (String k : keys) kept.put(k, now);
+            prefs(this).edit().putString("explicit", kept.toString()).apply();
+        } catch (JSONException ignored) {
+        }
+    }
+
     /** After a start without the network: how long the calendars are still waited for. */
     static final long LATE_NET_MS = 15 * 60_000L;
     /** A calendar server that still fails online is asked again only this often. */
@@ -404,7 +485,7 @@ public final class RouteService extends Service {
                     + events.size());
             List<Suggestion> list = suggestions(events);
             main.post(() -> {
-                if (!destroyed) show(list, false);
+                if (!destroyed) show(list, false, true);
             });
             return;
         }
@@ -573,16 +654,37 @@ public final class RouteService extends Service {
     }
 
     private void show(List<Suggestion> list, boolean asked) {
+        show(list, asked, false);
+    }
+
+    /**
+     * @param onlyNew a later check (the calendars synced, a routine's time came): the card only
+     *                for an event or a routine not offered yet today
+     */
+    private void show(List<Suggestion> list, boolean asked, boolean onlyNew) {
+        String why = onlyNew ? "проверка" : "запуск";
         if (!asked && !cardAtStart(this)) {
-            Journal.add(this, "запуск: карточка выключена в приложении");
+            if (!onlyNew) Journal.add(this, why + ": карточка выключена в приложении");
             return;
         }
         if (!asked && !Suggester.worthAsking(list)) {
             // Home, work, the frequent places: in the menu on the cluster, no card for them.
-            Journal.add(this, "запуск: нет события в календаре и привычной поездки — без карточки");
+            if (!onlyNew) {
+                Journal.add(this, why + ": нет события в календаре и привычной поездки — без карточки");
+            }
             return;
         }
-        if (!asked) Journal.add(this, "запуск: карточка, строк " + list.size());
+        if (!asked) {
+            List<String> keys = Suggester.explicitKeys(list,
+                    java.time.LocalDate.now(ZoneId.systemDefault()));
+            java.util.Set<String> before = offeredKeys();
+            if (onlyNew && before.containsAll(keys)) return; // nothing new since the last card
+            markOffered(keys);
+            prefs(this).edit().putLong("prompt_at", System.currentTimeMillis())
+                    .putInt("prompt_boot", bootCount()).apply();
+            Journal.add(this, why + (onlyNew ? ": появилось новое — карточка" : ": карточка")
+                    + ", строк " + list.size());
+        }
         if (list.isEmpty()) {
             DebugLog.i(TAG, "nothing to offer");
             if (asked && NotifyClient.installed(this)) {

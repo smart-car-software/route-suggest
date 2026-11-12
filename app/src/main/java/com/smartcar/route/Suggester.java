@@ -128,6 +128,20 @@ final class Suggester {
      * not tell us to look up — a calendar event or a routine. Home, work and the frequent places
      * alone are always there and stay in the menu.
      */
+    /**
+     * What a card offered that a later check must not offer again the same day: its events
+     * («Ужин · 18:00») and routines («Ice Power · по вторникам»), by row and day. Pure.
+     */
+    static List<String> explicitKeys(List<Suggestion> rows, LocalDate day) {
+        List<String> out = new ArrayList<>();
+        for (Suggestion s : rows) {
+            if (s.kind == Suggestion.Kind.EVENT || s.kind == Suggestion.Kind.ROUTINE) {
+                out.add(day + "|" + s.kind + "|" + s.row);
+            }
+        }
+        return out;
+    }
+
     static boolean worthAsking(List<Suggestion> rows) {
         for (Suggestion s : rows) {
             if (s.kind == Suggestion.Kind.EVENT || s.kind == Suggestion.Kind.ROUTINE) return true;
