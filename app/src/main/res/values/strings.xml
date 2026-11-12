@@ -117,6 +117,7 @@
         <item quantity="other">поездки записано — по ним приложение узнаёт ваши привычки</item>
     </plurals>
     <string name="allow">Разрешить</string>
+    <string name="granting">Включаю через ADB магнитолы…</string>
     <string name="later">Позже</string>
     <string name="q_overlay_title">Меню на приборке</string>
     <string name="q_overlay">Чтобы показывать список мест на вкладке навигации приборки, приложению нужно разрешение «Поверх других окон». Включить? Приложение даст его себе само через ADB магнитолы или откроет настройки.</string>

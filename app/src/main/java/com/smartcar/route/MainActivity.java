@@ -262,6 +262,9 @@ public final class MainActivity extends Activity {
         super.onResume();
         refresh();
         checkUpdate(false);
+        Runnable back = onBack;
+        onBack = null;
+        if (back != null) main.postDelayed(back, 300);
         if (!asked) {
             asked = true;
             main.postDelayed(() -> askNext(0), 600);
@@ -325,28 +328,28 @@ public final class MainActivity extends Activity {
                 return;
             case 1:
                 if (ClusterMenu.on(this) && !ClusterMenu.granted(this) && once("overlay")) {
-                    dialog(R.string.q_overlay_title, R.string.q_overlay, () -> grantMenu(), 2);
+                    dialog(R.string.q_overlay_title, R.string.q_overlay, this::grantMenu, 2);
                     return;
                 }
                 askNext(2);
                 return;
             case 2:
                 if (AutoGoService.on(this) && !AutoGoService.granted(this) && once("autogo")) {
-                    dialog(R.string.q_autogo_title, R.string.q_autogo, () -> grantAutoGo(), 3);
+                    dialog(R.string.q_autogo_title, R.string.q_autogo, this::grantAutoGo, 3);
                     return;
                 }
                 askNext(3);
                 return;
             case 3:
                 if (!NaviReader.enabled(this) && once("history")) {
-                    dialog(R.string.q_history_title, R.string.q_history, () -> enableNaviHistory(null), 4);
+                    dialog(R.string.q_history_title, R.string.q_history, this::enableNaviHistory, 4);
                     return;
                 }
                 askNext(4);
                 return;
             case 4:
                 if (!NaviListener.granted(this) && once("listener")) {
-                    dialog(R.string.q_listener_title, R.string.q_listener, this::openListenerSettings, 5);
+                    dialog(R.string.q_listener_title, R.string.q_listener, after -> openListenerSettings(), 5);
                 }
                 return;
             default:
@@ -360,15 +363,20 @@ public final class MainActivity extends Activity {
         return true;
     }
 
-    private void dialog(int title, int message, Runnable yes, int next) {
+    /** «Разрешить» does it and goes on when it is done; «Позже» goes on at once. */
+    private void dialog(int title, int message, java.util.function.Consumer<Runnable> yes, int next) {
+        Runnable go = () -> main.postDelayed(() -> askNext(next), 400);
         new AlertDialog.Builder(this)
                 .setTitle(title)
                 .setMessage(message)
-                .setPositiveButton(R.string.allow, (d, w) -> yes.run())
-                .setNegativeButton(R.string.later, null)
-                .setOnDismissListener(d -> main.postDelayed(() -> askNext(next), 400))
+                .setCancelable(false)
+                .setPositiveButton(R.string.allow, (d, w) -> yes.accept(go))
+                .setNegativeButton(R.string.later, (d, w) -> go.run())
                 .show();
     }
+
+    /** Set when Android's own settings screen was opened: what to go on with on coming back. */
+    private Runnable onBack;
 
     // ------------------------------------------------------------------ the state
 
@@ -483,8 +491,17 @@ public final class MainActivity extends Activity {
         }
     }
 
-    /** The accessibility service: as root through the unit's adb, else Android's own screen. */
     private void grantAutoGo() {
+        grantAutoGo(null);
+    }
+
+    private void grantMenu() {
+        grantMenu(null);
+    }
+
+    /** The accessibility service: as root through the unit's adb, else Android's own screen. */
+    private void grantAutoGo(Runnable after) {
+        toast(getString(R.string.granting));
         worker.execute(() -> {
             boolean ok;
             try {
@@ -500,9 +517,13 @@ public final class MainActivity extends Activity {
                 if (!done) {
                     try {
                         startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
+                        onBack = after;
                     } catch (RuntimeException e) {
                         toast(getString(R.string.grant_navi_failed));
+                        if (after != null) after.run();
                     }
+                } else if (after != null) {
+                    after.run();
                 }
                 main.postDelayed(this::refresh, 1500);
             });
@@ -510,7 +531,8 @@ public final class MainActivity extends Activity {
     }
 
     /** «Поверх окон»: as root through the unit's adb, else Android's own screen. */
-    private void grantMenu() {
+    private void grantMenu(Runnable after) {
+        toast(getString(R.string.granting));
         worker.execute(() -> {
             boolean ok;
             try {
@@ -526,9 +548,13 @@ public final class MainActivity extends Activity {
                     try {
                         startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                                 Uri.parse("package:" + getPackageName())));
+                        onBack = after;
                     } catch (RuntimeException e) {
                         toast(getString(R.string.grant_navi_failed));
+                        if (after != null) after.run();
                     }
+                } else if (after != null) {
+                    after.run();
                 }
                 RouteService.send(this, RouteService.ACTION_MENU_SWITCHED);
                 main.postDelayed(this::refresh, 1500);
