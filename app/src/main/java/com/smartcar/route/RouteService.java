@@ -331,10 +331,12 @@ public final class RouteService extends Service {
         // network yet (Wi-Fi/LTE come up seconds after the engine), for WAIT_NET_MS at most: a
         // calendar server that is down must not hold the question up.
         List<CalEvent> events;
+        int failures;
         long netFrom = System.currentTimeMillis();
         while (true) {
             CalendarSync.Result r = CalendarSync.events(this, System.currentTimeMillis(), ya.places());
             events = r.events;
+            failures = r.networkFailures;
             if (r.networkFailures == 0 || now || online()
                     || System.currentTimeMillis() - netFrom > WAIT_NET_MS || gone()) {
                 break;
@@ -360,6 +362,53 @@ public final class RouteService extends Service {
         main.post(() -> {
             if (!destroyed) show(list, now);
         });
+        if (!now && failures > 0) lateCalendar(ya);
+    }
+
+    /** After a start without the network: how long the calendars are still waited for. */
+    static final long LATE_NET_MS = 15 * 60_000L;
+    /** A calendar server that still fails online is asked again only this often. */
+    static final long LATE_RETRY_MS = 2 * 60_000L;
+
+    /**
+     * The calendars could not be read at the start (no network yet — it can come minutes after
+     * the engine): read them once it comes, for {@link #LATE_NET_MS}, and if there is an event
+     * the card comes then — the same card id, so a card shown for a routine meanwhile is
+     * replaced, with the event first.
+     */
+    private void lateCalendar(YandexAccount ya) {
+        Journal.add(this, "запуск: календари без сети — жду её до 15 минут");
+        long from = System.currentTimeMillis();
+        long lastTry = 0;
+        while (!gone() && System.currentTimeMillis() - from < LATE_NET_MS) {
+            sleep(15_000);
+            if (gone()) return;
+            if (!online() || System.currentTimeMillis() - lastTry < LATE_RETRY_MS) continue;
+            lastTry = System.currentTimeMillis();
+            CalendarSync.Result r = CalendarSync.events(this, System.currentTimeMillis(), ya.places());
+            if (r.networkFailures > 0 && r.events.isEmpty()) continue;
+            List<CalEvent> events = withCoordinates(r.events);
+            keepEvents(events);
+            long min = Math.round((System.currentTimeMillis() - from) / 60_000.0);
+            if (events.isEmpty()) {
+                Journal.add(this, "запуск: календари прочитались через " + min + " мин — событий нет");
+                return;
+            }
+            if (gone()) return;
+            if (NaviListener.guiding()) {
+                Journal.add(this, "запуск: календари прочитались через " + min
+                        + " мин, но Навигатор уже ведёт — без карточки");
+                return;
+            }
+            Journal.add(this, "запуск: календари прочитались через " + min + " мин — событий "
+                    + events.size());
+            List<Suggestion> list = suggestions(events);
+            main.post(() -> {
+                if (!destroyed) show(list, false);
+            });
+            return;
+        }
+        if (!gone()) Journal.add(this, "запуск: сеть для календарей так и не появилась");
     }
 
     /**
