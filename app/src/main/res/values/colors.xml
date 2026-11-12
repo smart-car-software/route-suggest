@@ -17,11 +17,25 @@
   -->
 
 <resources>
-    <!-- The settings screen. -->
-    <color name="background">#FF15171C</color>
-    <color name="text_primary">#FFF2F5F8</color>
-    <color name="text_secondary">#FF9AA4B0</color>
-    <color name="accent">#FF4FB7F0</color>
+    <!-- The app's screens, after the cluster (MSpeed's dark dial look): a night-blue ground,
+         panels with a cold rim, one cyan accent that glows. -->
+    <color name="background">#FF0A1020</color>
+    <color name="bg_top">#FF111B33</color>
+    <color name="bg_bottom">#FF070B16</color>
+    <color name="card">#E6121C30</color>
+    <color name="card_rim">#FF22324F</color>
+    <color name="item">#FF18243C</color>
+    <color name="text_primary">#FFEAF2FF</color>
+    <color name="text_secondary">#FF8494B2</color>
+    <color name="accent">#FF35C8FF</color>
+    <color name="accent_glow">#8035C8FF</color>
+    <color name="accent_dim">#2635C8FF</color>
+    <color name="accent_track">#7035C8FF</color>
+    <color name="track_off">#FF2A3650</color>
+    <color name="on_accent">#FF04111F</color>
+    <color name="ok">#FF3DDC97</color>
+    <color name="warn">#FFFFB547</color>
+    <color name="danger">#FFFF6B7A</color>
 
     <!-- Cards: picked off the Monjaro cluster's own navigation panel (as barrier-opener's gate
          question was), not the app theme. The cluster has a single dark look, so these have no

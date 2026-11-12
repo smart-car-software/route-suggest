@@ -25,9 +25,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.text.InputType;
 import android.view.Gravity;
-import android.view.View;
 import android.view.ViewGroup;
-import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.ImageView;
@@ -52,17 +50,23 @@ public final class CalendarActivity extends Activity {
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final Handler main = new Handler(Looper.getMainLooper());
     private LinearLayout root;
+    private Ui ui;
 
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
+        ui = new Ui(this);
         ScrollView scroll = new ScrollView(this);
-        scroll.setBackgroundColor(getColor(R.color.background));
-        root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        int pad = dp(24);
-        root.setPadding(pad, pad, pad, pad);
-        scroll.addView(root);
+        scroll.setBackground(ui.screen());
+        scroll.setFillViewport(true);
+        LinearLayout page = new LinearLayout(this);
+        page.setOrientation(LinearLayout.VERTICAL);
+        page.setGravity(Gravity.CENTER_HORIZONTAL);
+        page.setPadding(dp(28), dp(20), dp(28), dp(20));
+        root = ui.card();
+        root.setPadding(dp(28), dp(22), dp(28), dp(22));
+        page.addView(root, new LinearLayout.LayoutParams(dp(960), ViewGroup.LayoutParams.WRAP_CONTENT));
+        scroll.addView(page);
         setContentView(scroll);
         String id = getIntent().getStringExtra(EXTRA_ACCOUNT);
         if (id != null) {
@@ -87,10 +91,12 @@ public final class CalendarActivity extends Activity {
         root.addView(text(getString(R.string.cal_add_title), 24, true));
         root.addView(hint(getString(R.string.cal_add_hint)));
         for (CalAccount.Kind k : CalAccount.Kind.values()) {
-            root.addView(button(k.title, v -> form(k)));
+            root.addView(ui.item(k.title + "   ›", null, v -> form(k)));
         }
-        root.addView(hint(getString(R.string.cal_google)));
-        root.addView(button(getString(R.string.cancel), v -> finish()));
+        TextView g = hint(getString(R.string.cal_google));
+        g.setPadding(0, dp(14), 0, dp(4));
+        root.addView(g);
+        root.addView(ui.action(getString(R.string.cancel), v -> finish()));
     }
 
     private void form(CalAccount.Kind kind) {
@@ -125,7 +131,8 @@ public final class CalendarActivity extends Activity {
         }
         TextView status = hint("");
         final EditText serverField = server;
-        Button connect = button(getString(R.string.cal_connect), null);
+        TextView connect = ui.primary(getString(R.string.cal_connect), null);
+        ((LinearLayout.LayoutParams) connect.getLayoutParams()).topMargin = dp(18);
         connect.setOnClickListener(v -> {
             CalAccount a = new CalAccount();
             a.kind = kind;
@@ -162,7 +169,7 @@ public final class CalendarActivity extends Activity {
         });
         root.addView(connect);
         root.addView(status);
-        root.addView(button(getString(R.string.back), v -> pickService()));
+        root.addView(ui.action(getString(R.string.back), v -> pickService()));
     }
 
     private void choose(CalAccount a, boolean existing) {
@@ -175,12 +182,14 @@ public final class CalendarActivity extends Activity {
             cb.setText(c.name);
             cb.setTextSize(18);
             cb.setTextColor(getColor(R.color.text_primary));
+            cb.setButtonTintList(android.content.res.ColorStateList.valueOf(getColor(R.color.accent)));
+            cb.setPadding(dp(8), dp(8), 0, dp(8));
             cb.setChecked(c.on);
             cb.setOnCheckedChangeListener((v, on) -> c.on = on);
             root.addView(cb);
         }
         TextView status = hint("");
-        root.addView(button(getString(R.string.cal_save), v -> {
+        root.addView(ui.primary(getString(R.string.cal_save), v -> {
             if (a.enabled() == 0) {
                 status.setText(R.string.cal_none_chosen);
                 return;
@@ -193,15 +202,21 @@ public final class CalendarActivity extends Activity {
             }
         }));
         root.addView(status);
-        root.addView(button(getString(R.string.cancel), v -> finish()));
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        root.addView(row);
+        row.addView(ui.action(getString(R.string.cancel), v -> finish()));
         if (existing) {
-            root.addView(button(getString(R.string.cal_remove), v -> new android.app.AlertDialog.Builder(this)
+            TextView remove = ui.action(getString(R.string.cal_remove), null);
+            remove.setTextColor(getColor(R.color.danger));
+            row.addView(remove);
+            remove.setOnClickListener(v -> new android.app.AlertDialog.Builder(this)
                     .setMessage(getString(R.string.cal_remove_q, a.title()))
                     .setPositiveButton(R.string.cal_remove, (d, w) -> {
                         CalStore.remove(this, a.id);
                         finish();
                     })
-                    .setNegativeButton(R.string.cancel, null).show()));
+                    .setNegativeButton(R.string.cancel, null).show());
         }
     }
 
@@ -214,6 +229,7 @@ public final class CalendarActivity extends Activity {
         e.setTextSize(18);
         e.setTextColor(getColor(R.color.text_primary));
         e.setHintTextColor(getColor(R.color.text_secondary));
+        e.setBackgroundTintList(android.content.res.ColorStateList.valueOf(getColor(R.color.accent)));
         e.setInputType(InputType.TYPE_CLASS_TEXT | variation);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -223,35 +239,19 @@ public final class CalendarActivity extends Activity {
     }
 
     private TextView text(String s, int sp, boolean bold) {
-        TextView t = new TextView(this);
-        t.setText(s);
-        t.setTextSize(sp);
-        t.setTextColor(getColor(R.color.text_primary));
-        if (bold) t.setTypeface(t.getTypeface(), Typeface.BOLD);
+        TextView t = ui.text(s, sp, false);
+        if (bold) t.setTypeface(Typeface.create("sans-serif-light", Typeface.NORMAL));
+        if (bold) t.setShadowLayer(dp(10), 0, 0, getColor(R.color.accent_glow));
         return t;
     }
 
     private TextView hint(String s) {
-        TextView t = text(s, 15, false);
-        t.setTextColor(getColor(R.color.text_secondary));
+        TextView t = ui.hint(s);
         t.setPadding(0, dp(6), 0, dp(6));
         return t;
     }
 
-    private Button button(String s, View.OnClickListener l) {
-        Button b = new Button(this);
-        b.setText(s);
-        b.setAllCaps(false);
-        b.setTextSize(18);
-        if (l != null) b.setOnClickListener(l);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        lp.topMargin = dp(8);
-        b.setLayoutParams(lp);
-        return b;
-    }
-
     private int dp(int v) {
-        return Math.round(v * getResources().getDisplayMetrics().density);
+        return ui.dp(v);
     }
 }
