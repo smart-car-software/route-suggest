@@ -40,6 +40,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
+          fetch-depth: 0
 
       - name: Determine version
         id: version
@@ -83,6 +84,17 @@ jobs:
       - name: Run unit tests
         run: ./gradlew testDebugUnitTest
 
+      # What changed since the tag before: shown in the app under «Обновить до vX».
+      - name: Release notes
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          PREV=$(git describe --tags --abbrev=0 "${VERSION}^" 2>/dev/null || true)
+          RANGE=${PREV:+${PREV}..}${VERSION}
+          git log --format='- %s' "$RANGE" | grep -v -E '^- (docs|chore|ci)' > notes.md || true
+          [ -s notes.md ] || echo "- исправления" > notes.md
+          cat notes.md
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
@@ -90,4 +102,5 @@ jobs:
           name: Release ${{ steps.version.outputs.version }}
           draft: false
           prerelease: false
+          body_path: notes.md
           files: app/build/outputs/apk/release/route-suggest-${{ steps.version.outputs.version }}.apk
