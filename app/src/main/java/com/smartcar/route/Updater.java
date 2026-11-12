@@ -133,15 +133,15 @@ final class Updater {
         }
         String tmp = "/data/local/tmp/route-suggest-update.apk";
         StringBuilder out = new StringBuilder();
+        // One command: a second shell on the same connection never ran (emulator). The install is
+        // detached (its own session, a moment later): it ends this process and this connection.
+        Journal.add(c, "обновление: ставлю через root");
         try (LocalAdb adb = LocalAdb.connect(c, new StringBuilder())) {
             adb.shell("su 0 sh -c 'cp " + apk.getAbsolutePath() + " " + tmp + " && chmod 644 " + tmp
-                    + " && echo COPIED'", out::append);
-            if (!out.toString().contains("COPIED")) throw new IOException("нет root: " + out.toString().trim());
-            Journal.add(c, "обновление: ставлю через root");
-            // Detached (nohup): the install ends this process and with it this adb connection.
-            adb.shell("su 0 sh -c 'nohup sh -c \"pm install -r " + tmp + "; rm -f " + tmp
-                    + "\" >/dev/null 2>&1 &'", s -> { });
+                    + " && echo COPIED && (setsid nohup sh -c \"sleep 2; pm install -r " + tmp
+                    + "; rm -f " + tmp + "\" </dev/null >/dev/null 2>&1 &)'", out::append);
         }
+        if (!out.toString().contains("COPIED")) throw new IOException("нет root: " + out.toString().trim());
         return true;
     }
 

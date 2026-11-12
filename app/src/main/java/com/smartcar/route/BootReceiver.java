@@ -28,6 +28,9 @@ public final class BootReceiver extends BroadcastReceiver {
         String a = i.getAction();
         if (Intent.ACTION_BOOT_COMPLETED.equals(a) || "android.intent.action.QUICKBOOT_POWERON".equals(a)
                 || Intent.ACTION_MY_PACKAGE_REPLACED.equals(a)) {
+            if (Intent.ACTION_MY_PACKAGE_REPLACED.equals(a)) {
+                Journal.add(c, "обновлено до " + BuildConfig.VERSION_NAME);
+            }
             if (!RouteService.isStarted()) RouteService.start(c, false);
         }
     }
