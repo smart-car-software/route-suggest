@@ -133,15 +133,20 @@ final class Updater {
         }
         String tmp = "/data/local/tmp/route-suggest-update.apk";
         StringBuilder out = new StringBuilder();
-        // One command: a second shell on the same connection never ran (emulator). The install is
-        // detached (its own session, a moment later): it ends this process and this connection.
+        // One command, waited for: a detached install did not survive this adb session (emulator).
+        // The system ends this process only once the install is done, so «Success» may never
+        // reach us — then the update is in, and the journal says so from the new version.
         Journal.add(c, "обновление: ставлю через root");
         try (LocalAdb adb = LocalAdb.connect(c, new StringBuilder())) {
             adb.shell("su 0 sh -c 'cp " + apk.getAbsolutePath() + " " + tmp + " && chmod 644 " + tmp
-                    + " && echo COPIED && (setsid nohup sh -c \"sleep 2; pm install -r " + tmp
-                    + "; rm -f " + tmp + "\" </dev/null >/dev/null 2>&1 &)'", out::append);
+                    + " && echo COPIED && pm install -r " + tmp + "; rm -f " + tmp + "'", out::append);
         }
-        if (!out.toString().contains("COPIED")) throw new IOException("нет root: " + out.toString().trim());
+        String o = out.toString();
+        if (!o.contains("COPIED")) throw new IOException("нет root: " + o.trim());
+        if (!o.contains("Success")) {
+            String err = o.substring(o.indexOf("COPIED") + 6).trim();
+            throw new IOException("не установилось: " + (err.isEmpty() ? "?" : err));
+        }
         return true;
     }
 
