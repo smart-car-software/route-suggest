@@ -465,8 +465,10 @@ public final class MainActivity extends Activity {
             out.add(new State(Ui.TODO, getString(R.string.st_menu_missing), this::grantMenu));
         } else {
             boolean up = ClusterMenu.state.startsWith("подключено");
+            // A tap shows it for 30 s: to see how it looks.
             out.add(new State(up ? Ui.OK : Ui.OFF, getString(R.string.st_menu_ok,
-                    ClusterMenu.state.isEmpty() ? "—" : ClusterMenu.state), null));
+                    ClusterMenu.state.isEmpty() ? "—" : ClusterMenu.state),
+                    () -> RouteService.send(this, RouteService.ACTION_MENU_TRIAL)));
         }
         if (!AutoGoService.on(this)) {
             out.add(new State(Ui.OFF, getString(R.string.st_autogo_off), null));

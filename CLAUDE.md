@@ -36,6 +36,15 @@ The user's Mac has a Claude session with Android Studio and an Android 9 arm64 e
   first fix / screen-on after 10+ minutes off) — only when `Suggester.worthAsking` (an event or
   a routine; the user's requirement), and the card can be switched off. `ReplyReceiver` gets
   the wheel's answer.
+- `RouteService` also rechecks every 10 minutes while the unit is on: an event or a routine not
+  offered yet today (`Suggester.explicitKeys`) brings the card (the user's requirement).
+- UI (`Ui`, `MainActivity`, `CalendarActivity`): the cluster's look (MSpeed: night blue, cyan
+  accent), views in code; settings are toggles; Android's permissions are asked in dialogs on
+  opening, once each (prefs `asked`), and a state line that needs something is tappable — no
+  static grant buttons (the user's requirement).
+- `Updater`: the latest GitHub Release of this (public) repo, installed by the button only (the
+  user's choice): `pm install -r` as root through the unit's adb, else PackageInstaller with
+  Android's confirmation. Same signing key.
 - `ClusterMenu`: every place (`Suggester.menu`) on the cluster menu's navigation tab. ECarX's
   `DimMenuInteraction` by reflection (`onTabChanged`, tab 2), the left joystick as
   `ECARX_KEY_DIM*` broadcasts, our overlay on display 2 at 740/720, 414×284 — all learned from
