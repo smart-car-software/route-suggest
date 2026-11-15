@@ -45,11 +45,11 @@ The user's Mac has a Claude session with Android Studio and an Android 9 arm64 e
 - `Updater`: the latest GitHub Release of this (public) repo, installed by the button only (the
   user's choice): `pm install -r` as root through the unit's adb, else PackageInstaller with
   Android's confirmation. Same signing key.
-- `MenuTab`: every place (`Suggester.menu`) on the cluster menu's navigation tab. Car
-  Notification Service draws the menu and reads the joystick (its `ClusterMenu`, moved there from
-  here so barrier-opener's gates share it); this app sends the rows (`MENU_TAB`, again on
-  `MENU_WANTED` → `MenuWantedReceiver`) and gets the pressed row's text back
-  (`RouteService.ACTION_MENU_PICK`).
+- `ClusterMenu`: every place (`Suggester.menu`) on the cluster menu's navigation tab. ECarX's
+  `DimMenuInteraction` by reflection (`onTabChanged`, tab 2), the left joystick as
+  `ECARX_KEY_DIM*` broadcasts, our overlay on display 2 at 740/720, 414×284 — all learned from
+  mNavi's APK (closed, no licence: only the API calls, no code). Only the car can test it: the
+  emulator has no ECarX (the app's «Показать меню» shows it on the main display there).
 - Data sources: own GPS for the drives (the Navigator exposes no destination — see README),
   `NaviListener` only for «is it guiding now», Yandex DataSync via the app's own Yandex login
   (magic link, like calendar-bot's `calbot/yandex.py`), the calendars (above).

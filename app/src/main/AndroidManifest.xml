@@ -23,6 +23,8 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- The menu on the cluster's navigation tab is our window over the driver's display. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <!-- «Обновить» without root: Android's installer, which asks. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
@@ -73,15 +75,6 @@
         <receiver
             android:name=".UpdateReceiver"
             android:exported="false" />
-
-        <!-- Car Notification Service asks for the cluster menu's rows (by package). -->
-        <receiver
-            android:name=".MenuWantedReceiver"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="com.smartcar.notify.action.MENU_WANTED" />
-            </intent-filter>
-        </receiver>
 
         <receiver
             android:name=".BootReceiver"
