@@ -64,6 +64,10 @@ public final class RouteService extends Service {
     static final String ACTION_SUGGEST_NOW = "com.smartcar.route.SUGGEST_NOW";
     static final String ACTION_MENU_TRIAL = "com.smartcar.route.MENU_TRIAL";
     static final String ACTION_MENU_SWITCHED = "com.smartcar.route.MENU_SWITCHED";
+    /** Car Notification Service wants the menu's rows. */
+    static final String ACTION_MENU_REFRESH = "com.smartcar.route.MENU_REFRESH";
+    /** The driver pressed a row of the menu on the cluster (extras from the service: key, index). */
+    static final String ACTION_MENU_PICK = "com.smartcar.route.MENU_PICK";
     static final String ACTION_LEARN = "com.smartcar.route.LEARN";
     static final String PREFS = "route";
     static final String CARD_ID = "com.smartcar.route:suggest";
@@ -91,7 +95,8 @@ public final class RouteService extends Service {
     private volatile long lastFixAt;
     private volatile boolean promptRunning;
     private volatile boolean destroyed;
-    private ClusterMenu menu;
+    /** The menu's rows as last sent: a pick is matched against them by its key (the text). */
+    private volatile List<Suggestion> menuSent = Collections.emptyList();
 
     private final LocationListener listener = new LocationListener() {
         @Override
@@ -163,8 +168,7 @@ public final class RouteService extends Service {
         registerReceiver(screen, new IntentFilter(Intent.ACTION_SCREEN_ON));
         restoreAutoGo();
         main.postDelayed(recheckTick, RECHECK_MS);
-        menu = new ClusterMenu(this, this::menuRows);
-        if (ClusterMenu.on(this)) menu.start();
+        publishMenu();
         // Created at boot (BootReceiver) — the ignition — or by opening the app.
         armPrompt(false);
     }
@@ -173,12 +177,15 @@ public final class RouteService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) {
         String a = intent == null ? null : intent.getAction();
         if (ACTION_SUGGEST_NOW.equals(a)) armPrompt(true);
-        else if (ACTION_MENU_TRIAL.equals(a)) menu.trial();
-        else if (ACTION_LEARN.equals(a)) learnLater(intent.getStringExtra("query"), intent.getLongExtra("at", 0));
+        else if (ACTION_MENU_TRIAL.equals(a)) {
+            publishMenu();
+            main.postDelayed(() -> MenuTab.trial(this), 500); // after the rows reach the service
+        } else if (ACTION_LEARN.equals(a)) learnLater(intent.getStringExtra("query"), intent.getLongExtra("at", 0));
         else if (ACTION_MENU_SWITCHED.equals(a)) {
-            if (ClusterMenu.on(this)) menu.start();
-            else menu.hideNow();
-        }
+            if (MenuTab.on(this)) publishMenu();
+            else MenuTab.remove(this);
+        } else if (ACTION_MENU_REFRESH.equals(a)) publishMenu();
+        else if (ACTION_MENU_PICK.equals(a)) menuPick(intent.getStringExtra("key"));
         return START_STICKY;
     }
 
@@ -201,7 +208,6 @@ public final class RouteService extends Service {
         }
         if (lm != null) lm.removeUpdates(listener);
         main.removeCallbacks(recheckTick);
-        if (menu != null) menu.stop();
         calendar.shutdownNow();
         saveDetector();
         worker.shutdown();
@@ -599,7 +605,41 @@ public final class RouteService extends Service {
     private void keepEvents(List<CalEvent> events) {
         lastEvents = events;
         eventsAt = System.currentTimeMillis();
-        if (menu != null) menu.update();
+        publishMenu();
+    }
+
+    /** The rows to Car Notification Service, built on the worker (the database). */
+    private void publishMenu() {
+        if (!MenuTab.on(this) || destroyed) return;
+        try {
+            worker.execute(() -> {
+                try {
+                    List<Suggestion> rows = menuRows();
+                    menuSent = rows;
+                    MenuTab.publish(this, rows);
+                } catch (RuntimeException e) {
+                    Journal.add(this, "меню: строки не собрались: " + Errors.text(e));
+                }
+            });
+        } catch (java.util.concurrent.RejectedExecutionException ignored) {
+            // the service is going
+        }
+    }
+
+    /** A row pressed on the cluster: found by its text among the rows last sent. */
+    private void menuPick(String key) {
+        Suggestion s = null;
+        for (Suggestion x : menuSent) if (x.row.equals(key)) s = x;
+        if (s == null) {
+            Journal.add(this, "меню: выбранной строки уже нет в списке");
+            return;
+        }
+        Suggestion chosen = s;
+        String how = Navigator.viaAlice(chosen, Navigator.online(this)) ? "Алиса"
+                : chosen.hasGeo() || Navigator.latLon(chosen.query) != null ? "координаты" : "поиск";
+        boolean ok = choose(this, chosen);
+        Journal.add(this, "меню: выбрано (" + chosen.kind + ", " + how + ")"
+                + (ok ? "" : " — Навигатор не открылся"));
     }
 
     /** The menu's rows: at once from what is known, the calendar re-read behind when old. */

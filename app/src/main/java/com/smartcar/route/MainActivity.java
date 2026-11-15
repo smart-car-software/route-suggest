@@ -160,11 +160,10 @@ public final class MainActivity extends Activity {
                     RouteService.prefs(this).edit().putBoolean(RouteService.PREF_CARD, on).apply();
                 });
         menu = ui.toggle(settings, getString(R.string.t_menu), getString(R.string.menu_hint),
-                ClusterMenu.on(this), (v, on) -> {
+                MenuTab.on(this), (v, on) -> {
                     if (binding) return;
-                    RouteService.prefs(this).edit().putBoolean(ClusterMenu.PREF, on).apply();
+                    RouteService.prefs(this).edit().putBoolean(MenuTab.PREF, on).apply();
                     RouteService.send(this, RouteService.ACTION_MENU_SWITCHED);
-                    if (on && !ClusterMenu.granted(this)) grantMenu();
                     refresh();
                 });
         autoGo = ui.toggle(settings, getString(R.string.t_autogo), getString(R.string.autogo_hint),
@@ -327,10 +326,7 @@ public final class MainActivity extends Activity {
                 askNext(1);
                 return;
             case 1:
-                if (ClusterMenu.on(this) && !ClusterMenu.granted(this) && once("overlay")) {
-                    dialog(R.string.q_overlay_title, R.string.q_overlay, this::grantMenu, 2);
-                    return;
-                }
+                // Was the overlay for the cluster menu: Car Notification Service draws it now.
                 askNext(2);
                 return;
             case 2:
@@ -441,7 +437,7 @@ public final class MainActivity extends Activity {
                 drawCalendars(accounts);
                 binding = true;
                 card.setChecked(RouteService.cardAtStart(this));
-                menu.setChecked(ClusterMenu.on(this));
+                menu.setChecked(MenuTab.on(this));
                 autoGo.setChecked(AutoGoService.on(this));
                 history.setChecked(NaviReader.enabled(this));
                 binding = false;
@@ -471,15 +467,11 @@ public final class MainActivity extends Activity {
                     NaviReader.kept(this).size(), at > 0 ? DateUtils.getRelativeTimeSpanString(at).toString() : "—"), null)
                     : new State(Ui.TODO, getString(R.string.st_navi_history_err, err), () -> enableNaviHistory(null)));
         }
-        if (!ClusterMenu.on(this)) {
+        if (!MenuTab.on(this)) {
             out.add(new State(Ui.OFF, getString(R.string.st_menu_off), null));
-        } else if (!ClusterMenu.granted(this)) {
-            out.add(new State(Ui.TODO, getString(R.string.st_menu_missing), this::grantMenu));
-        } else {
-            boolean up = ClusterMenu.state.startsWith("подключено");
+        } else if (NotifyClient.installed(this)) {
             // A tap shows it for 30 s: to see how it looks.
-            out.add(new State(up ? Ui.OK : Ui.OFF, getString(R.string.st_menu_ok,
-                    ClusterMenu.state.isEmpty() ? "—" : ClusterMenu.state),
+            out.add(new State(Ui.OK, getString(R.string.st_menu_ok),
                     () -> RouteService.send(this, RouteService.ACTION_MENU_TRIAL)));
         }
         if (!AutoGoService.on(this)) {
@@ -509,10 +501,6 @@ public final class MainActivity extends Activity {
         grantAutoGo(null);
     }
 
-    private void grantMenu() {
-        grantMenu(null);
-    }
-
     /** The accessibility service: as root through the unit's adb, else Android's own screen. */
     private void grantAutoGo(Runnable after) {
         toast(getString(R.string.granting));
@@ -539,38 +527,6 @@ public final class MainActivity extends Activity {
                 } else if (after != null) {
                     after.run();
                 }
-                main.postDelayed(this::refresh, 1500);
-            });
-        });
-    }
-
-    /** «Поверх окон»: as root through the unit's adb, else Android's own screen. */
-    private void grantMenu(Runnable after) {
-        toast(getString(R.string.granting));
-        worker.execute(() -> {
-            boolean ok;
-            try {
-                ClusterMenu.grantAsRoot(this);
-                ok = true;
-            } catch (IOException e) {
-                DebugLog.w("Menu", "as root: " + Errors.text(e));
-                ok = false;
-            }
-            boolean done = ok;
-            main.post(() -> {
-                if (!done) {
-                    try {
-                        startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                                Uri.parse("package:" + getPackageName())));
-                        onBack = after;
-                    } catch (RuntimeException e) {
-                        toast(getString(R.string.grant_navi_failed));
-                        if (after != null) after.run();
-                    }
-                } else if (after != null) {
-                    after.run();
-                }
-                RouteService.send(this, RouteService.ACTION_MENU_SWITCHED);
                 main.postDelayed(this::refresh, 1500);
             });
         });

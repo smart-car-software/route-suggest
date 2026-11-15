@@ -32,6 +32,9 @@ final class NotifyClient {
     static final String RECEIVER = "com.smartcar.notify.RequestReceiver";
     static final String ACTION_SHOW = "com.smartcar.notify.action.SHOW";
     static final String ACTION_CANCEL = "com.smartcar.notify.action.CANCEL";
+    static final String ACTION_MENU_TAB = "com.smartcar.notify.action.MENU_TAB";
+    static final String ACTION_MENU_REMOVE = "com.smartcar.notify.action.MENU_REMOVE";
+    static final String ACTION_MENU_TRIAL = "com.smartcar.notify.action.MENU_TRIAL";
 
     static final String RESULT_ANSWERED = "answered";
     static final String RESULT_UNAVAILABLE = "unavailable";
@@ -68,6 +71,29 @@ final class NotifyClient {
         i.putExtra("title", title);
         if (text != null) i.putExtra("text", text);
         c.sendBroadcast(i);
+    }
+
+    /** The list in the cluster's menu (docs/API.md of the service, «Список в меню приборки»). */
+    static void menuTab(Context c, String tab, int dimTab, String title, String[] rows, String empty,
+                        int order, PendingIntent pick) {
+        Intent i = base(ACTION_MENU_TAB, null);
+        i.putExtra("tab", tab);
+        i.putExtra("dim_tab", dimTab);
+        i.putExtra("title", title);
+        i.putExtra("options", rows);
+        i.putExtra("keys", rows);
+        i.putExtra("empty", empty);
+        i.putExtra("order", order);
+        i.putExtra("pick", pick);
+        c.sendBroadcast(i);
+    }
+
+    static void menuRemove(Context c, String tab) {
+        c.sendBroadcast(base(ACTION_MENU_REMOVE, null).putExtra("tab", tab));
+    }
+
+    static void menuTrial(Context c, String tab) {
+        c.sendBroadcast(base(ACTION_MENU_TRIAL, null).putExtra("tab", tab));
     }
 
     static void cancel(Context c, String id) {
