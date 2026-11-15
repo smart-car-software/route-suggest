@@ -40,7 +40,7 @@
     <string name="cancel">Отмена</string>
 
     <string name="st_notify_ok">Всплывашки на приборке: Car Notification Service</string>
-    <string name="st_notify_missing">Нет Car Notification Service — предложения откроются на экране магнитолы</string>
+    <string name="st_notify_missing">Нет Car Notification Service — предложения откроются на экране магнитолы. Нажмите, чтобы установить</string>
     <string name="st_navi_ok">Яндекс Навигатор найден</string>
     <string name="st_navi_missing">Яндекс Навигатор не найден — маршрут откроется в Картах</string>
     <string name="st_location_ok">Поездки записываются: %1$d</string>
@@ -136,6 +136,12 @@
     <string name="upd_error">Не получилось: %1$s</string>
     <string name="upd_downloading">Скачиваю %1$s…</string>
     <string name="upd_allow_unknown">Разрешите установку из этого приложения и нажмите «Обновить» ещё раз</string>
+    <string name="q_notify_title">Car Notification Service</string>
+    <string name="q_notify">С Car Notification Service карточка «Куда едем?» появляется на приборке, а выбирать можно кнопками руля. Сейчас он не установлен. Скачать с GitHub и установить?</string>
+    <string name="notify_install">Установить</string>
+    <string name="notify_downloading">Скачиваю Car Notification Service…</string>
+    <string name="notify_installed">Car Notification Service установлен</string>
+    <string name="notify_allow_unknown">Разрешите установку из этого приложения, затем нажмите строку «Нет Car Notification Service» ещё раз</string>
     <string name="yandex_logout_q">Выйти из Яндекса? Закладки, Дом и Работа больше не будут обновляться.</string>
     <string name="journal">Журнал</string>
     <string name="journal_hint">Что приложение решило и что сообщила приборка — если что-то не так, пришлите снимок этого списка. Мест и адресов здесь нет.</string>

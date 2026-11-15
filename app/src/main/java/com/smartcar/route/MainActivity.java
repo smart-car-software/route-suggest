@@ -350,6 +350,14 @@ public final class MainActivity extends Activity {
             case 4:
                 if (!NaviListener.granted(this) && once("listener")) {
                     dialog(R.string.q_listener_title, R.string.q_listener, after -> openListenerSettings(), 5);
+                    return;
+                }
+                askNext(5);
+                return;
+            case 5:
+                if (!NotifyClient.installed(this) && once("notify")) {
+                    dialog(R.string.q_notify_title, R.string.q_notify, R.string.notify_install,
+                            this::installNotify, 6);
                 }
                 return;
             default:
@@ -365,12 +373,16 @@ public final class MainActivity extends Activity {
 
     /** «Разрешить» does it and goes on when it is done; «Позже» goes on at once. */
     private void dialog(int title, int message, java.util.function.Consumer<Runnable> yes, int next) {
+        dialog(title, message, R.string.allow, yes, next);
+    }
+
+    private void dialog(int title, int message, int yesLabel, java.util.function.Consumer<Runnable> yes, int next) {
         Runnable go = () -> main.postDelayed(() -> askNext(next), 400);
         new AlertDialog.Builder(this)
                 .setTitle(title)
                 .setMessage(message)
                 .setCancelable(false)
-                .setPositiveButton(R.string.allow, (d, w) -> yes.accept(go))
+                .setPositiveButton(yesLabel, (d, w) -> yes.accept(go))
                 .setNegativeButton(R.string.later, (d, w) -> go.run())
                 .show();
     }
@@ -444,7 +456,7 @@ public final class MainActivity extends Activity {
         boolean located = checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
                 == PackageManager.PERMISSION_GRANTED;
         out.add(NotifyClient.installed(this) ? new State(Ui.OK, getString(R.string.st_notify_ok), null)
-                : new State(Ui.TODO, getString(R.string.st_notify_missing), null));
+                : new State(Ui.TODO, getString(R.string.st_notify_missing), () -> installNotify(null)));
         out.add(Navigator.installed(this, Navigator.NAVI) ? new State(Ui.OK, getString(R.string.st_navi_ok), null)
                 : new State(Ui.TODO, getString(R.string.st_navi_missing), null));
         out.add(located ? new State(Ui.OK, getString(R.string.st_location_on), null)
@@ -661,6 +673,51 @@ public final class MainActivity extends Activity {
             if (!err.isEmpty()) updateBox.addView(ui.hint(getString(R.string.upd_error, err)));
             updateBox.addView(ui.action(getString(R.string.upd_check), v -> checkUpdate(true)));
         }
+    }
+
+    /**
+     * Car Notification Service from its latest release, the same way as our own update: silently
+     * as root when the unit trusts us, else Android's installer. {@code after} — the next
+     * question, at once: the download is not waited for.
+     */
+    private void installNotify(Runnable after) {
+        if (after != null) after.run();
+        toast(getString(R.string.notify_downloading));
+        worker.execute(() -> {
+            try {
+                Updater.Release r = Updater.latest(Updater.NOTIFY_LATEST);
+                if (r == null) throw new IOException("в релизе нет APK");
+                File apk = Updater.download(this, r, "car-notification-service.apk");
+                Journal.add(this, "Car Notification Service: скачан " + r.tag);
+                if (Updater.installAsRoot(this, apk)) {
+                    main.post(() -> {
+                        toast(getString(R.string.notify_installed));
+                        refresh();
+                    });
+                    return;
+                }
+                main.post(() -> {
+                    if (!getPackageManager().canRequestPackageInstalls()) {
+                        toast(getString(R.string.notify_allow_unknown));
+                        try {
+                            startActivity(new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                                    Uri.parse("package:" + getPackageName())));
+                        } catch (RuntimeException ignored) {
+                        }
+                        return;
+                    }
+                    worker.execute(() -> {
+                        try {
+                            Updater.installWithPrompt(this, apk, NotifyClient.PACKAGE);
+                        } catch (IOException | RuntimeException e) {
+                            main.post(() -> toast(getString(R.string.upd_error, Errors.text(e))));
+                        }
+                    });
+                });
+            } catch (IOException | RuntimeException e) {
+                main.post(() -> toast(getString(R.string.upd_error, Errors.text(e))));
+            }
+        });
     }
 
     private void update() {

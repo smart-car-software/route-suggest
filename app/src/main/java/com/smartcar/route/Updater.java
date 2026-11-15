@@ -42,7 +42,13 @@ import java.net.URL;
  * installer, which asks. The same signing key, so the data stays.
  */
 final class Updater {
-    static final String LATEST = "https://api.github.com/repos/smart-car-software/route-suggest/releases/latest";
+    static final String LATEST = latestUrl("smart-car-software/route-suggest");
+    /** Car Notification Service: offered for install from its own releases, the same way. */
+    static final String NOTIFY_LATEST = latestUrl("smart-car-software/car-notification-service");
+
+    static String latestUrl(String repo) {
+        return "https://api.github.com/repos/" + repo + "/releases/latest";
+    }
 
     static final class Release {
         final String tag;
@@ -93,7 +99,12 @@ final class Updater {
 
     /** The latest release, or null when there is none to be read. Blocking. */
     static Release latest() throws IOException {
-        Http.Response r = Http.call("GET", LATEST, Http.headers("Accept", "application/vnd.github+json",
+        return latest(LATEST);
+    }
+
+    /** The latest release at {@code url} ({@link #latestUrl}), or null. Blocking. */
+    static Release latest(String url) throws IOException {
+        Http.Response r = Http.call("GET", url,Http.headers("Accept", "application/vnd.github+json",
                 "User-Agent", "route-suggest/" + BuildConfig.VERSION_NAME), null, null, null);
         if (r.code == 404) throw new IOException("релизы не видны (репозиторий закрыт?)");
         if (!r.ok()) throw new IOException("GitHub: HTTP " + r.code);
@@ -106,7 +117,11 @@ final class Updater {
 
     /** Downloads the APK into the app's cache. Blocking. */
     static File download(Context c, Release rel) throws IOException {
-        File out = new File(c.getCacheDir(), "update.apk");
+        return download(c, rel, "update.apk");
+    }
+
+    static File download(Context c, Release rel, String name) throws IOException {
+        File out = new File(c.getCacheDir(), name);
         HttpURLConnection h = (HttpURLConnection) new URL(rel.apkUrl).openConnection();
         h.setInstanceFollowRedirects(true);
         h.setConnectTimeout(Http.CONNECT_MS);
@@ -152,20 +167,25 @@ final class Updater {
 
     /** Android's own installer: it asks the driver to confirm. */
     static void installWithPrompt(Context c, File apk) throws IOException {
+        installWithPrompt(c, apk, c.getPackageName());
+    }
+
+    /** The same for another app ({@code pkg}), e.g. Car Notification Service. */
+    static void installWithPrompt(Context c, File apk, String pkg) throws IOException {
         PackageInstaller pi = c.getPackageManager().getPackageInstaller();
         PackageInstaller.SessionParams p = new PackageInstaller.SessionParams(
                 PackageInstaller.SessionParams.MODE_FULL_INSTALL);
-        p.setAppPackageName(c.getPackageName());
+        p.setAppPackageName(pkg);
         int id = pi.createSession(p);
         try (PackageInstaller.Session s = pi.openSession(id)) {
             try (InputStream in = new FileInputStream(apk);
-                 OutputStream os = s.openWrite("route-suggest.apk", 0, apk.length())) {
+                 OutputStream os = s.openWrite(pkg + ".apk", 0, apk.length())) {
                 byte[] buf = new byte[64 * 1024];
                 int n;
                 while ((n = in.read(buf)) > 0) os.write(buf, 0, n);
                 s.fsync(os);
             }
-            Intent done = new Intent(c, UpdateReceiver.class);
+            Intent done = new Intent(c, UpdateReceiver.class).putExtra(UpdateReceiver.EXTRA_PACKAGE, pkg);
             PendingIntent pend = PendingIntent.getBroadcast(c, id, done,
                     PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_MUTABLE);
             s.commit(pend.getIntentSender());

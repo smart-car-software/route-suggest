@@ -24,6 +24,9 @@ import android.content.pm.PackageInstaller;
 
 /** Android's installer answers here: shows its confirmation, or tells how it ended. */
 public final class UpdateReceiver extends BroadcastReceiver {
+    /** Which package the session installs: this app (an update) or another one (the service). */
+    static final String EXTRA_PACKAGE = "package";
+
     @Override
     public void onReceive(Context c, Intent i) {
         int status = i.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE);
@@ -40,6 +43,12 @@ public final class UpdateReceiver extends BroadcastReceiver {
             return;
         }
         String msg = i.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE);
+        String pkg = i.getStringExtra(EXTRA_PACKAGE);
+        if (pkg != null && !pkg.equals(c.getPackageName())) {
+            Journal.add(c, status == PackageInstaller.STATUS_SUCCESS ? pkg + " установлен"
+                    : pkg + " не установился: " + (msg == null ? status : msg));
+            return;
+        }
         Journal.add(c, status == PackageInstaller.STATUS_SUCCESS ? "обновление установлено"
                 : "обновление не установилось: " + (msg == null ? status : msg));
     }
