@@ -167,6 +167,9 @@ public final class MainActivity extends Activity {
                     if (on && !ClusterMenu.granted(this)) grantMenu();
                     refresh();
                 });
+        ui.toggle(settings, getString(R.string.t_menu_navi), getString(R.string.menu_navi_hint),
+                ClusterMenu.naviFirst(this), (v, on) -> RouteService.prefs(this).edit()
+                        .putBoolean(ClusterMenu.PREF_NAVI_FIRST, on).apply());
         autoGo = ui.toggle(settings, getString(R.string.t_autogo), getString(R.string.autogo_hint),
                 AutoGoService.on(this), (v, on) -> {
                     if (binding) return;

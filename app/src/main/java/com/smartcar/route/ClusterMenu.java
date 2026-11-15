@@ -62,6 +62,7 @@ import java.util.concurrent.Executors;
  */
 final class ClusterMenu {
     static final String PREF = "cluster_menu";
+    static final String PREF_NAVI_FIRST = "cluster_menu_navigation_first";
 
     static final String DIM_CLASS = "com.ecarx.xui.adaptapi.diminteraction.DimMenuInteraction";
     static final String DIM_CALLBACK =
@@ -107,6 +108,9 @@ final class ClusterMenu {
     private int first;
     /** Bumped on each show and hide: a late list for an old show is dropped. */
     private int generation;
+    /** The cluster's tab as last told, and when: for {@link DimTabs#jumpToNavigation}. */
+    private int lastTab = DimTabs.UNKNOWN;
+    private long lastTabAt;
 
     ClusterMenu(Context c, Rows source) {
         this.c = c;
@@ -115,6 +119,11 @@ final class ClusterMenu {
 
     static boolean on(Context c) {
         return RouteService.prefs(c).getBoolean(PREF, true);
+    }
+
+    /** A menu just opened on the phone tab is taken to navigation (the user's wish); on by default. */
+    static boolean naviFirst(Context c) {
+        return RouteService.prefs(c).getBoolean(PREF_NAVI_FIRST, true);
     }
 
     static boolean granted(Context c) {
@@ -218,9 +227,33 @@ final class ClusterMenu {
             int tab = (Integer) args[0];
             state = "подключено, вкладка " + tab;
             main.post(() -> {
+                long now = android.os.SystemClock.elapsedRealtime();
+                int previous = lastTab;
+                long since = lastTabAt == 0 ? Long.MAX_VALUE : now - lastTabAt;
+                lastTab = tab;
+                lastTabAt = now;
+                if (naviFirst(c) && DimTabs.jumpToNavigation(previous, tab, since)) switchToNavigation();
                 if (tab == NAVI_TAB) show(0);
                 else hide();
             });
+        }
+    }
+
+    /**
+     * The menu opened by the wheel's button comes up on the phone tab: asks the cluster for
+     * navigation ({@code requestDimSwitchTabWindow}, DIM message (0, 8, 4, [tab]) — read from the
+     * AdaptAPI jar). It answers with {@code onTabChanged(2)} if it obeys; not seen in the car yet,
+     * the journal tells.
+     */
+    private void switchToNavigation() {
+        if (dim == null) return;
+        try {
+            dim.getClass().getMethod("requestDimSwitchTabWindow", int.class).invoke(dim, NAVI_TAB);
+            Journal.add(c, "меню открылось на телефоне — прошу вкладку навигации");
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
+            Journal.add(c, "меню: вкладку навигации не попросить: " + Errors.text(
+                    e instanceof java.lang.reflect.InvocationTargetException && e.getCause() != null
+                            ? e.getCause() : e));
         }
     }
 

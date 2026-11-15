@@ -107,6 +107,8 @@
     <string name="sec_update">Обновление</string>
     <string name="t_card">Карточка «Куда едем?»</string>
     <string name="t_menu">Меню на приборке</string>
+    <string name="t_menu_navi">Открывать меню на навигации</string>
+    <string name="menu_navi_hint">Кнопка меню на руле открывает приборку на вкладке телефона — приложение сразу переводит её на навигацию. Если с навигации перейти на телефон самому, вкладка остаётся.</string>
     <string name="t_autogo">Сам нажимать «Поехали»</string>
     <string name="t_history">История Навигатора</string>
     <string name="st_location_on">Геопозиция есть — поездки записываются</string>
