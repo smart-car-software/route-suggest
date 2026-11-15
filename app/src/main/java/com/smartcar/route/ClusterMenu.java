@@ -63,6 +63,9 @@ import java.util.concurrent.Executors;
 final class ClusterMenu {
     static final String PREF = "cluster_menu";
     static final String PREF_NAVI_FIRST = "cluster_menu_navigation_first";
+    /** How many times the cluster is asked for the navigation tab, and how far apart. */
+    static final int JUMP_TRIES = 4;
+    static final long JUMP_RETRY_MS = 400L;
 
     static final String DIM_CLASS = "com.ecarx.xui.adaptapi.diminteraction.DimMenuInteraction";
     static final String DIM_CALLBACK =
@@ -232,7 +235,7 @@ final class ClusterMenu {
                 long since = lastTabAt == 0 ? Long.MAX_VALUE : now - lastTabAt;
                 lastTab = tab;
                 lastTabAt = now;
-                if (naviFirst(c) && DimTabs.jumpToNavigation(previous, tab, since)) switchToNavigation();
+                if (naviFirst(c) && DimTabs.jumpToNavigation(previous, tab, since)) switchToNavigation(1);
                 if (tab == NAVI_TAB) show(0);
                 else hide();
             });
@@ -245,16 +248,26 @@ final class ClusterMenu {
      * AdaptAPI jar). It answers with {@code onTabChanged(2)} if it obeys; not seen in the car yet,
      * the journal tells.
      */
-    private void switchToNavigation() {
+    private void switchToNavigation(int attempt) {
         if (dim == null) return;
         try {
             dim.getClass().getMethod("requestDimSwitchTabWindow", int.class).invoke(dim, NAVI_TAB);
-            Journal.add(c, "меню открылось на телефоне — прошу вкладку навигации");
+            Journal.add(c, "меню открылось на телефоне — прошу вкладку навигации"
+                    + (attempt > 1 ? " (попытка " + attempt + ")" : ""));
         } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
             Journal.add(c, "меню: вкладку навигации не попросить: " + Errors.text(
                     e instanceof java.lang.reflect.InvocationTargetException && e.getCause() != null
                             ? e.getCause() : e));
+            return;
         }
+        // The first request did nothing in the car (v0.12.0): the cluster may not take it while
+        // its menu is still coming up. Asked again while it stays on the phone tab.
+        if (attempt < JUMP_TRIES) main.postDelayed(() -> {
+            if (lastTab == DimTabs.PHONE) switchToNavigation(attempt + 1);
+        }, JUMP_RETRY_MS);
+        else main.postDelayed(() -> {
+            if (lastTab == DimTabs.PHONE) Journal.add(c, "меню: приборка осталась на телефоне");
+        }, JUMP_RETRY_MS);
     }
 
     /** The class's own public methods, for the journal: what else the unit offers. */
