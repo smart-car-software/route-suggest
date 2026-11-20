@@ -63,6 +63,9 @@ The user's Mac has a Claude session with Android Studio and an Android 9 arm64 e
   once; needs network and ru locale). Never `map_search` for a route (a card, needs a finger),
   never `rtext` with text (ignored), never coordinates to Alice (she swaps lat/lon). The mNavi
   READY_TO_GO/LETS_GO handshake does not exist in mod 30.3.0.
+- A place in the calendar is offered only as the event (the user's requirement): `Rows` drops
+  a later bookmark / routine / frequent / home-work row at an event's point (250 m) or, where
+  points can't tell (no point on one side), by name or address (`Suggester.sameAsEvent`).
 - A place's point (`Suggester.point`): a Yandex place nearby, else the Navigator's own
   destination for drives there (`Trip.dest`), else the middle of the stops.
 - A force-stop of the app drops AutoGoService from the enabled services (Android does it);

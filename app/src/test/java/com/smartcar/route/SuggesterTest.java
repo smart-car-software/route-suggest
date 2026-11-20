@@ -277,6 +277,48 @@ public class SuggesterTest {
     }
 
     @Test
+    public void aPlaceInTheCalendarIsOnlyTheEvent() {
+        // An organisation bookmark (no point) and an event at its address, geocoded by us.
+        List<Place> places = new ArrayList<>(YANDEX);
+        places.add(new Place(Place.Kind.BOOKMARK, "Ромашка", "улица Баумана, 5", Double.NaN,
+                Double.NaN));
+        Suggester.Input in = input(at(11, 10, 17, 45), HOME, Collections.emptyList(), places);
+        in.events = Collections.singletonList(new CalEvent("Ужин", at(11, 10, 18, 0),
+                at(11, 10, 20, 0), "ул. Баумана, 5", "", Double.NaN, Double.NaN)
+                .geocodedAt(SHOP[0], SHOP[1]));
+        assertEquals(Arrays.asList("Ужин · 18:00", "На работу", "Ice Power"),
+                rows(Suggester.menu(in)));
+        // The bookmark's name in the location.
+        in.events = Collections.singletonList(new CalEvent("Ужин", at(11, 10, 18, 0),
+                at(11, 10, 20, 0), "Ромашка, Казань", "", SHOP[0], SHOP[1]));
+        assertEquals(Arrays.asList("Ужин · 18:00", "На работу", "Ice Power"),
+                rows(Suggester.menu(in)));
+        // Not in the calendar: the bookmark is there.
+        in.events = Collections.emptyList();
+        assertEquals(Arrays.asList("На работу", "Ice Power", "Ромашка"), rows(Suggester.menu(in)));
+    }
+
+    @Test
+    public void aRoutineInTheCalendarIsOnlyTheEvent() {
+        List<Trip> trips = Arrays.asList(trip(at(10, 20, 18, 5), HOME, GYM),
+                trip(at(10, 27, 17, 50), HOME, GYM), trip(at(11, 3, 18, 20), HOME, GYM));
+        Suggester.Input in = input(at(11, 10, 17, 45), HOME, trips, YANDEX);
+        // An address Nominatim did not find: no point to tell the places apart, the name does.
+        in.events = Collections.singletonList(new CalEvent("Тренировка", at(11, 10, 18, 30),
+                at(11, 10, 20, 0), "Ice Power", "", Double.NaN, Double.NaN));
+        assertEquals(Arrays.asList("Тренировка · 18:30", "На работу"), rows(Suggester.suggest(in)));
+        assertEquals(Arrays.asList("Тренировка · 18:30", "На работу"), rows(Suggester.menu(in)));
+    }
+
+    @Test
+    public void homeIsNotAWordOfTheLocation() {
+        Suggester.Input in = input(at(11, 10, 17, 45), SHOP, Collections.emptyList(), YANDEX);
+        in.events = Collections.singletonList(new CalEvent("Концерт", at(11, 10, 18, 0),
+                at(11, 10, 20, 0), "Дом культуры, Ленина 5", "", CAFE[0], CAFE[1]));
+        assertEquals(Arrays.asList("Концерт · 18:00", "Домой"), rows(Suggester.suggest(in)));
+    }
+
+    @Test
     public void nothingToOfferThenHomeOrWork() {
         List<Trip> none = Collections.emptyList();
         assertEquals(Collections.singletonList("На работу"),

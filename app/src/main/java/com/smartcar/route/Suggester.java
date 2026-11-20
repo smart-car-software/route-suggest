@@ -172,6 +172,7 @@ final class Suggester {
                     Instant.ofEpochMilli(e.startMs).atZone(in.zone));
             // Only a known place's name is remembered for the drive: «Ужин» is not a place.
             String name = e.place;
+            rows.event(e);
             if (e.hasGeo() && !e.geocoded) {
                 rows.add(Suggestion.Kind.EVENT, clip(e.title, LABEL_WITH_SUFFIX) + " · " + when, name,
                         e.lat, e.lon, "");
@@ -289,6 +290,14 @@ final class Suggester {
             this.query = query;
             this.visits = visits;
         }
+
+        /** A bookmark's address, to know it in an event's location. */
+        String address = "";
+
+        Candidate withAddress(String address) {
+            this.address = address;
+            return this;
+        }
     }
 
     /**
@@ -314,7 +323,8 @@ final class Suggester {
             if (p.hasGeo()) {
                 int visits = 0;
                 for (Trip t : recent) if (p.metersTo(t.endLat, t.endLon) <= SAME_M) visits++;
-                all.add(new Candidate(kind, label, p.name, p.lat, p.lon, "", visits));
+                all.add(new Candidate(kind, label, p.name, p.lat, p.lon, "", visits)
+                        .withAddress(p.address));
                 continue;
             }
             // No point (an organisation bookmark): the place drives went to under its name (the
@@ -332,15 +342,17 @@ final class Suggester {
             double kLat = remembered == null ? Double.NaN : remembered[0];
             double kLon = remembered == null ? Double.NaN : remembered[1];
             if (same == null) {
-                all.add(new Candidate(kind, label, p.name, kLat, kLon, text, 0));
+                all.add(new Candidate(kind, label, p.name, kLat, kLon, text, 0)
+                        .withAddress(p.address));
                 continue;
             }
             named.add(same);
             boolean navi = false;
             for (Trip t : same.trips) if (t.hasDest()) navi = true;
             double[] at = point(same, in.places);
-            all.add(navi ? new Candidate(kind, label, p.name, at[0], at[1], "", same.trips.size())
-                    : new Candidate(kind, label, p.name, kLat, kLon, text, same.trips.size()));
+            all.add((navi ? new Candidate(kind, label, p.name, at[0], at[1], "", same.trips.size())
+                    : new Candidate(kind, label, p.name, kLat, kLon, text, same.trips.size()))
+                    .withAddress(p.address));
         }
         for (Cluster c : clusters) {
             if (c.trips.size() < FREQUENT_MIN || named.contains(c)) continue;
@@ -356,7 +368,9 @@ final class Suggester {
         }
         all.sort((a, b) -> a.visits != b.visits ? Integer.compare(b.visits, a.visits)
                 : a.label.compareToIgnoreCase(b.label));
-        for (Candidate c : all) rows.add(c.kind, c.label, c.name, c.lat, c.lon, c.query);
+        for (Candidate c : all) {
+            rows.add(c.kind, c.label, c.name, c.lat, c.lon, c.query, c.address);
+        }
     }
 
     /**
@@ -377,20 +391,68 @@ final class Suggester {
         return false;
     }
 
-    /** The rows so far: at most {@code max}, none where the car is, one per place. */
+    /**
+     * Whether a place (a bookmark, home, work, a place driven to) is where a calendar event is:
+     * its name is the event's Yandex place, its location or — with no location — its title;
+     * its address (or a name that is an address) is the location's; a bookmark's name stands
+     * in the location as whole words («Ice Power, ул. Зорге, 66»). For the rows the points can
+     * not tell apart: an organisation bookmark has none, an event with only an address may
+     * have none. Pure.
+     */
+    static boolean sameAsEvent(CalEvent e, Suggestion.Kind kind, String name, String address) {
+        String n = EventFilter.norm(name);
+        String loc = EventFilter.norm(e.location);
+        if (!n.isEmpty()) {
+            if (n.equals(EventFilter.norm(e.place)) || n.equals(loc)) return true;
+            if (loc.isEmpty() && n.equals(EventFilter.norm(e.title))) return true;
+            if (bothAddresses(name, e.location)) return true;
+            // «Дом» and «Работа» are words of many locations; their points tell them apart.
+            if (kind != Suggestion.Kind.HOME && kind != Suggestion.Kind.WORK && n.length() >= 4
+                    && (" " + loc + " ").contains(" " + n + " ")) {
+                return true;
+            }
+        }
+        return address != null && bothAddresses(address, e.location);
+    }
+
+    /** {@link #sameAddress}, with a house number in each: «Дом» is in «Дом культуры, 5». */
+    private static boolean bothAddresses(String a, String b) {
+        return sameAddress(a, b) && sameAddress(b, a);
+    }
+
+    /**
+     * The rows so far: at most {@code max}, none where the car is, one per place — and a place
+     * that is a calendar event's only as the event (the user's requirement).
+     */
     private static final class Rows {
         final Input in;
         final int max;
         final List<Suggestion> out = new ArrayList<>();
+        /** Every event considered, offered or not (the car may be there already). */
+        final List<CalEvent> events = new ArrayList<>();
 
         Rows(Input in, int max) {
             this.in = in;
             this.max = max;
         }
 
+        void event(CalEvent e) {
+            events.add(e);
+        }
+
         boolean add(Suggestion.Kind kind, String row, String name, double lat, double lon,
                     String query) {
+            return add(kind, row, name, lat, lon, query, "");
+        }
+
+        boolean add(Suggestion.Kind kind, String row, String name, double lat, double lon,
+                    String query, String address) {
             if (out.size() >= max) return false;
+            if (kind != Suggestion.Kind.EVENT) {
+                for (CalEvent e : events) {
+                    if (sameAsEvent(e, kind, name, address)) return false;
+                }
+            }
             if (Geo.valid(lat, lon)) {
                 if (Geo.valid(in.hereLat, in.hereLon)
                         && Geo.meters(lat, lon, in.hereLat, in.hereLon) <= AT_M) {
