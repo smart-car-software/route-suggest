@@ -245,8 +245,8 @@ final class ClusterMenu {
     /**
      * The menu opened by the wheel's button comes up on the phone tab: asks the cluster for
      * navigation ({@code requestDimSwitchTabWindow}, DIM message (0, 8, 4, [tab]) — read from the
-     * AdaptAPI jar). It answers with {@code onTabChanged(2)} if it obeys; not seen in the car yet,
-     * the journal tells.
+     * AdaptAPI jar). It answers with {@code onTabChanged(2)} if it obeys; the journal tells. The
+     * user reported v0.12.1 (with the repeats below) working in the car.
      */
     private void switchToNavigation(int attempt) {
         if (dim == null) return;
@@ -260,8 +260,9 @@ final class ClusterMenu {
                             ? e.getCause() : e));
             return;
         }
-        // The first request did nothing in the car (v0.12.0): the cluster may not take it while
-        // its menu is still coming up. Asked again while it stays on the phone tab.
+        // With one request (v0.12.0) the user still asked for navigation by default: the cluster
+        // may not take it while its menu is still coming up. Asked again while it stays on the
+        // phone tab.
         if (attempt < JUMP_TRIES) main.postDelayed(() -> {
             if (lastTab == DimTabs.PHONE) switchToNavigation(attempt + 1);
         }, JUMP_RETRY_MS);

@@ -50,7 +50,8 @@ The user's Mac has a Claude session with Android Studio and an Android 9 arm64 e
   `ECARX_KEY_DIM*` broadcasts, our overlay on display 2 at 740/720, 414×284 — all learned from
   mNavi's APK (closed, no licence: only the API calls, no code). The emulator stubs
   `DimMenuInteraction` (`headunit dim`). A menu just opened on the phone tab is taken to
-  navigation (`DimTabs`, `requestDimSwitchTabWindow`; not confirmed in the car). The menu stays
+  navigation (`DimTabs`, `requestDimSwitchTabWindow`, asked up to four times 400 ms apart; the user reported v0.12.1
+  working in the car, no journal of it was seen). The menu stays
   in this app: a shared one in Car Notification Service was tried (v0.11.0) and dropped — the
   cluster's tabs are fixed (no API adds one; the AdaptAPI's address/contact lists are stubs), so
   a shared layer bought nothing. barrier-opener draws its gates on the phone tab the same way.
